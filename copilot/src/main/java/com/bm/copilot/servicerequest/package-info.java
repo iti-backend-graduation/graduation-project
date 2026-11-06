@@ -1,4 +1,4 @@
 /**
- * Authentication, users, roles, permissions.
+ * Request creation, validation, lifecycle.
  */
-package com.bm.copilot.audit;
+package com.bm.copilot.servicerequest;

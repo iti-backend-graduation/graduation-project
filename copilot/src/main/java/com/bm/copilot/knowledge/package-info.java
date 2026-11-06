@@ -1,4 +1,4 @@
 /**
- * Authentication, users, roles, permissions.
+ * Document ingestion and metadata.
  */
-package com.bm.copilot.audit;
+package com.bm.copilot.knowledge;

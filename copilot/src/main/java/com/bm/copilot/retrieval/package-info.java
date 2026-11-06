@@ -1,4 +1,4 @@
 /**
- * Authentication, users, roles, permissions.
+ * Semantic search, keyword search, ranking.
  */
-package com.bm.copilot.audit;
+package com.bm.copilot.retrieval;

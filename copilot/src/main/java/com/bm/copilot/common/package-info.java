@@ -1,4 +1,4 @@
 /**
- * Authentication, users, roles, permissions.
+ * Shared code: error handling, correlation ID, config.
  */
-package com.bm.copilot.audit;
+package com.bm.copilot.common;

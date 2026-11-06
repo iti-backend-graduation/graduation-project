@@ -1,4 +1,4 @@
 /**
- * Authentication, users, roles, permissions.
+ * Grounded answering and agent orchestration.
  */
-package com.bm.copilot.audit;
+package com.bm.copilot.copilot;
