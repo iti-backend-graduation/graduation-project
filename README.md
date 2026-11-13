@@ -9,7 +9,7 @@ An internal banking operations copilot built as a **Java/Spring Boot backend app
 
 ## Project Status
 
-**Planning / initial setup.** The features and architecture below describe the project requirements and intended implementation, not completed functionality.
+**In active development.** The features and architecture below describe the project requirements and implementation direction.
 
 ## Objectives
 
@@ -128,13 +128,7 @@ This is a logical module plan, **not** a claim about the current repository stru
 
 ## Getting Started
 
-The application has not yet been scaffolded. Once the implementation is added, this section will document:
-
-1. Prerequisites and required environment variables (without secrets).
-2. Local database and application setup.
-3. Maven build and test commands.
-4. Docker startup and shutdown commands.
-5. API documentation and a repeatable demo scenario.
+The application is under active development. Setup instructions, environment variables, local database configuration, Maven commands, Docker usage, API documentation, and the repeatable demo scenario will be maintained here as the implementation is completed.
 
 **Do not use real banking data or commit credentials, API keys, or other secrets.**
 
