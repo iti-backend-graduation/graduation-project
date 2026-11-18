@@ -1,0 +1,107 @@
+{
+  "info": {
+    "name": "Banque Misr Copilot - Knowledge API",
+    "description": "Manual and collection-run checks for the document knowledge ingestion API. Set supervisorToken after the authentication module is available.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "supervisorToken", "value": "" },
+    { "key": "markdownFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\docs-src\\01-card-services-handbook.md" },
+    { "key": "pdfFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\docs-src\\16-synthetic-fee-schedule.pdf" },
+    { "key": "unsupportedFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\postman\\unsupported.txt" }
+  ],
+  "item": [
+    {
+      "name": "Authorization",
+      "item": [
+        {
+          "name": "List documents without authentication",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/admin/documents" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Unauthenticated request is blocked', function () {",
+            "  pm.expect([401, 403]).to.include(pm.response.code);",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Document ingestion",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{supervisorToken}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "Upload Markdown document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{markdownFile}}" }] },
+            "url": "{{baseUrl}}/api/admin/documents"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Markdown upload returns 201', function () { pm.response.to.have.status(201); });",
+            "pm.test('Document was indexed', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.status).to.eql('INGESTED');",
+            "  pm.expect(body.chunkCount).to.be.above(0);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Upload same Markdown again",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{markdownFile}}" }] },
+            "url": "{{baseUrl}}/api/admin/documents"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Duplicate upload returns 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('Duplicate is reported', function () { pm.expect(pm.response.json().status).to.eql('ALREADY_INGESTED'); });"
+          ] } }]
+        },
+        {
+          "name": "Upload PDF document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{pdfFile}}" }] },
+            "url": "{{baseUrl}}/api/admin/documents"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('PDF upload returns 201', function () { pm.response.to.have.status(201); });",
+            "pm.test('PDF was indexed', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.status).to.eql('INGESTED');",
+            "  pm.expect(body.chunkCount).to.be.above(0);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "List ingested documents",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/admin/documents" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Document list returns 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('Both formats are present', function () {",
+            "  const formats = pm.response.json().map(function (item) { return item.format; });",
+            "  pm.expect(formats).to.include('MARKDOWN');",
+            "  pm.expect(formats).to.include('PDF');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Reject unsupported file type",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{unsupportedFile}}" }] },
+            "url": "{{baseUrl}}/api/admin/documents"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Unsupported format is rejected', function () { pm.response.to.have.status(400); });"
+          ] } }]
+        }
+      ]
+    }
+  ]
+}
