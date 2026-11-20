@@ -6,7 +6,7 @@ public interface CurrentUserProvider {
     /**
      * Returns the logged-in user.
      *
-     * @throws org.springframework.security.access.AccessDeniedException if nobody is authenticated
+     * @throws org.springframework.security.core.AuthenticationException if nobody is authenticated
      */
     CurrentUser require();
 }
