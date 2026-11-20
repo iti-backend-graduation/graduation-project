@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * The ONE security filter chain of the application (Spring refuses to start with two "any request" chains).
@@ -17,6 +18,7 @@ import org.springframework.security.web.SecurityFilterChain;
  */
 @Configuration
 @EnableMethodSecurity
+@EnableConfigurationProperties(JwtProperties.class)
 class SecurityConfig {
 
     @Bean
