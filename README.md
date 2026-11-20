@@ -132,6 +132,43 @@ The application is under active development. Setup instructions, environment var
 
 **Do not use real banking data or commit credentials, API keys, or other secrets.**
 
+### Local setup
+
+1. Start PostgreSQL with pgvector:
+
+```powershell
+cd copilot
+docker compose up -d db
+```
+
+2. Set local environment values in `copilot/.env`:
+
+```properties
+DB_PASSWORD=1234
+DB_USER=copilot
+DB_NAME=copilot
+JWT_SECRET=replace-with-at-least-32-characters
+GEMINI_API_KEY=your-local-gemini-key
+```
+
+3. Run the application:
+
+```powershell
+cd copilot
+.\mvnw spring-boot:run
+```
+
+4. Run all tests:
+
+```powershell
+cd copilot
+.\mvnw test
+```
+
+The Gemini embedding model is `gemini-embedding-001`; document chunks use 768
+dimensions. Flyway migration V21 switches the existing vector schema and removes
+old provider embeddings, which cannot be reused after an embedding-model change.
+
 ## Acceptance Demo
 
 The completed project should demonstrate:

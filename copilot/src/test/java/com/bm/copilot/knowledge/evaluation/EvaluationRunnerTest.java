@@ -2,6 +2,11 @@ package com.bm.copilot.knowledge.evaluation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -19,7 +24,29 @@ class EvaluationRunnerTest {
                         : new EvaluationRunner.EvaluationObservation(null, false, false));
 
         assertThat(report.retrievalHitRate()).isEqualTo(0.5);
-        assertThat(report.groundedness()).isEqualTo(0.5);
+        assertThat(report.groundedness()).isEqualTo(1.0);
         assertThat(report.refusalCorrectness()).isEqualTo(1.0);
+    }
+
+    @Test
+    void evaluationDatasetCoversTheRequiredCategoriesAndHasAtLeast15Cases() throws Exception {
+        String json = Files.readString(Path.of("eval/cases.json"), StandardCharsets.UTF_8);
+        List<DatasetCase> cases = new ObjectMapper().readValue(
+                json, new TypeReference<List<DatasetCase>>() {});
+
+        assertThat(cases).hasSizeGreaterThanOrEqualTo(15);
+        assertThat(cases.stream().map(DatasetCase::category).distinct())
+                .contains("retrieval", "out-of-scope", "ambiguous", "prompt-injection",
+                        "incomplete-request", "unauthorized-action", "duplicate-execution",
+                        "workflow", "agent-failure");
+    }
+
+    private record DatasetCase(
+            String id,
+            String category,
+            String question,
+            String expectedDocument,
+            Integer expectedPage,
+            String expectedBehavior) {
     }
 }

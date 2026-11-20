@@ -2,6 +2,7 @@ package com.bm.copilot.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +18,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.http.HttpHeaders;
 
 /** Logs in as the real demo users against a real database. */
 @SpringBootTest
@@ -77,6 +79,30 @@ class AuthLoginIntegrationTest {
         login("", "")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void supervisorBearerTokenCanListDocuments() throws Exception {
+        String token = login("supervisor1", "Supervisor#123")
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        mockMvc.perform(get("/api/admin/documents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer "
+                                + JsonPath.read(token, "$.accessToken")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void employeeBearerTokenCannotListDocuments() throws Exception {
+        String token = login("employee1", "Employee#123")
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        mockMvc.perform(get("/api/admin/documents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer "
+                                + JsonPath.read(token, "$.accessToken")))
+                .andExpect(status().isForbidden());
     }
 
     private ResultActions login(String username, String password) throws Exception {

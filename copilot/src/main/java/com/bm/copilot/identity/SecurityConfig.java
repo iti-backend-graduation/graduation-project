@@ -27,7 +27,7 @@ class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityErrorHandler errors) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable) // no cookies, only a header token: nothing for CSRF to abuse
+                .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login").permitAll()
@@ -44,7 +44,7 @@ class SecurityConfig {
         return http.build();
     }
 
-    /** Reads the token's "role" claim (EMPLOYEE / SUPERVISOR) and exposes it as ROLE_EMPLOYEE / ROLE_SUPERVISOR. */
+    /** Reads the token's "role" claim and exposes it as a Spring Security authority. */
     private static JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
         authorities.setAuthoritiesClaimName(JwtService.CLAIM_ROLE);
@@ -54,7 +54,7 @@ class SecurityConfig {
         return converter;
     }
 
-    /** A supervisor can do everything an employee can. Static, so Spring creates it early and safely. */
+    /** A supervisor can do everything an employee can. */
     @Bean
     static RoleHierarchy roleHierarchy() {
         return RoleHierarchyImpl.withDefaultRolePrefix()

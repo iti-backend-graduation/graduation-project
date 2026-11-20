@@ -32,7 +32,7 @@ public class Chunk {
     private int tokenCount;
 
     @JdbcTypeCode(SqlTypes.VECTOR)
-    @Column(nullable = false, columnDefinition = "vector(1536)")
+    @Column(nullable = false, columnDefinition = "vector(768)")
     private float[] embedding;
 
     protected Chunk() {
