@@ -1,20 +1,23 @@
 package com.bm.copilot.identity;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * The ONE security filter chain of the application (Spring refuses to start with two "any request" chains).
- * <p>
- * TEMPORARY: lets every request through so the team can build and test endpoints before login exists.
- * Replaced in Week 1 by JWT login and role rules. It must never reach production.
+ * Every request needs a valid JWT, except login, health and API docs.
  */
 @Configuration
 @EnableMethodSecurity
@@ -22,11 +25,41 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityErrorHandler errors) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+                .csrf(AbstractHttpConfigurer::disable) // no cookies, only a header token: nothing for CSRF to abuse
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/actuator/health/**").permitAll()
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .anyRequest().authenticated())
+                .exceptionHandling(handling -> handling
+                        .authenticationEntryPoint(errors)
+                        .accessDeniedHandler(errors))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                        .authenticationEntryPoint(errors)
+                        .accessDeniedHandler(errors));
         return http.build();
+    }
+
+    /** Reads the token's "role" claim (EMPLOYEE / SUPERVISOR) and exposes it as ROLE_EMPLOYEE / ROLE_SUPERVISOR. */
+    private static JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
+        authorities.setAuthoritiesClaimName(JwtService.CLAIM_ROLE);
+        authorities.setAuthorityPrefix("ROLE_");
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        return converter;
+    }
+
+    /** A supervisor can do everything an employee can. Static, so Spring creates it early and safely. */
+    @Bean
+    static RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.withDefaultRolePrefix()
+                .role("SUPERVISOR").implies("EMPLOYEE")
+                .build();
     }
 
     /** Hashes and checks passwords with BCrypt. Plain passwords are never stored. */
