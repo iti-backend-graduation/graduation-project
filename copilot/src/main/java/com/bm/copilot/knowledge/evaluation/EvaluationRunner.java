@@ -8,31 +8,35 @@ public class EvaluationRunner {
         Objects.requireNonNull(cases, "cases");
         Objects.requireNonNull(evaluator, "evaluator");
         if (cases.isEmpty()) {
-            return new EvaluationReport(0, 0, 0, 0);
+            return new EvaluationReport(0, 0, 0, 0, 0, 0);
         }
 
         int retrievalHits = 0;
         int groundedAnswers = 0;
         int correctRefusals = 0;
+        int expectedRefusals = 0;
+        int answeredCases = 0;
         for (EvaluationCase evaluationCase : cases) {
             EvaluationObservation observation = evaluator.evaluate(evaluationCase.question());
             if (evaluationCase.expectedDocument() != null
                     && evaluationCase.expectedDocument().equals(observation.document())) {
                 retrievalHits++;
             }
-            if (observation.answered() && observation.citationsGrounded()) {
-                groundedAnswers++;
+            if (observation.answered()) {
+                answeredCases++;
+                if (observation.citationsGrounded()) {
+                    groundedAnswers++;
+                }
             }
-            if ("REFUSE".equals(evaluationCase.expectedBehavior()) && !observation.answered()) {
-                correctRefusals++;
-            }
-            if ("ANSWER".equals(evaluationCase.expectedBehavior())
-                    && observation.answered()
-                    && observation.citationsGrounded()) {
-                correctRefusals++;
+            if ("REFUSE".equals(evaluationCase.expectedBehavior())) {
+                expectedRefusals++;
+                if (!observation.answered()) {
+                    correctRefusals++;
+                }
             }
         }
-        return new EvaluationReport(cases.size(), retrievalHits, groundedAnswers, correctRefusals);
+        return new EvaluationReport(cases.size(), retrievalHits, groundedAnswers,
+                correctRefusals, answeredCases, expectedRefusals);
     }
 
     @FunctionalInterface
@@ -46,21 +50,22 @@ public class EvaluationRunner {
     public record EvaluationObservation(String document, boolean answered, boolean citationsGrounded) {
     }
 
-    public record EvaluationReport(int cases, int retrievalHits, int groundedAnswers, int correctBehaviors) {
+    public record EvaluationReport(int cases, int retrievalHits, int groundedAnswers,
+                                   int correctRefusals, int answeredCases, int expectedRefusals) {
         public double retrievalHitRate() {
-            return percentage(retrievalHits);
+            return percentage(retrievalHits, cases);
         }
 
         public double groundedness() {
-            return percentage(groundedAnswers);
+            return answeredCases == 0 ? 0 : (double) groundedAnswers / answeredCases;
         }
 
         public double refusalCorrectness() {
-            return percentage(correctBehaviors);
+            return expectedRefusals == 0 ? 1 : (double) correctRefusals / expectedRefusals;
         }
 
-        private double percentage(int value) {
-            return cases == 0 ? 0 : (double) value / cases;
+        private double percentage(int value, int total) {
+            return total == 0 ? 0 : (double) value / total;
         }
     }
 }

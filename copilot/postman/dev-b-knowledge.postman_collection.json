@@ -1,11 +1,12 @@
 {
   "info": {
-    "name": "Banque Misr Copilot - Knowledge API",
-    "description": "Manual and collection-run checks for the document knowledge ingestion API. Set supervisorToken after the authentication module is available.",
+    "name": "Banque Misr Copilot - Complete API",
+    "description": "JWT, security, health, API documentation, and Gemini document-ingestion checks.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "employeeToken", "value": "" },
     { "key": "supervisorToken", "value": "" },
     { "key": "markdownFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\docs-src\\01-card-services-handbook.md" },
     { "key": "pdfFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\docs-src\\16-synthetic-fee-schedule.pdf" },
@@ -13,15 +14,129 @@
   ],
   "item": [
     {
-      "name": "Authorization",
+      "name": "Authentication",
       "item": [
         {
-          "name": "List documents without authentication",
-          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/admin/documents" },
+          "name": "Login employee",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"employee1\",\n  \"password\": \"Employee#123\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
           "event": [{ "listen": "test", "script": { "exec": [
-            "pm.test('Unauthenticated request is blocked', function () {",
-            "  pm.expect([401, 403]).to.include(pm.response.code);",
-            "});"
+            "pm.test('Employee login returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.tokenType).to.eql('Bearer');",
+            "pm.expect(body.expiresIn).to.eql(1800);",
+            "pm.collectionVariables.set('employeeToken', body.accessToken);"
+          ] } }]
+        },
+        {
+          "name": "Login supervisor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"supervisor1\",\n  \"password\": \"Supervisor#123\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Supervisor login returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.tokenType).to.eql('Bearer');",
+            "pm.collectionVariables.set('supervisorToken', body.accessToken);"
+          ] } }]
+        },
+        {
+          "name": "Wrong password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"employee1\",\n  \"password\": \"wrong-password\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Wrong password returns 401', function () { pm.response.to.have.status(401); });",
+            "pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED');"
+          ] } }]
+        },
+        {
+          "name": "Unknown user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"nobody\",\n  \"password\": \"whatever\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Unknown user returns 401', function () { pm.response.to.have.status(401); });",
+            "pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED');"
+          ] } }]
+        },
+        {
+          "name": "Blank login fields",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"\",\n  \"password\": \"\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Blank fields return 400', function () { pm.response.to.have.status(400); });",
+            "pm.expect(pm.response.json().code).to.eql('VALIDATION_FAILED');"
+          ] } }]
+        },
+        {
+          "name": "Employee identity",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Employee identity returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.username).to.eql('employee1');",
+            "pm.expect(body.role).to.eql('EMPLOYEE');"
+          ] } }]
+        },
+        {
+          "name": "Supervisor identity",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{supervisorToken}}" }],
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Supervisor identity returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.username).to.eql('supervisor1');",
+            "pm.expect(body.role).to.eql('SUPERVISOR');"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Security",
+      "item": [
+        {
+          "name": "Protected request without token",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/admin/documents" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Missing token returns 401', function () { pm.response.to.have.status(401); });",
+            "pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED');"
+          ] } }]
+        },
+        {
+          "name": "Employee cannot list documents",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+            "url": "{{baseUrl}}/api/admin/documents"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Employee document access returns 403', function () { pm.response.to.have.status(403); });",
+            "pm.expect(pm.response.json().code).to.eql('FORBIDDEN');"
           ] } }]
         }
       ]
@@ -34,71 +149,97 @@
           "name": "Upload Markdown document",
           "request": {
             "method": "POST",
-            "header": [],
             "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{markdownFile}}" }] },
             "url": "{{baseUrl}}/api/admin/documents"
           },
           "event": [{ "listen": "test", "script": { "exec": [
-            "pm.test('Markdown upload returns 201', function () { pm.response.to.have.status(201); });",
-            "pm.test('Document was indexed', function () {",
-            "  const body = pm.response.json();",
-            "  pm.expect(body.status).to.eql('INGESTED');",
-            "  pm.expect(body.chunkCount).to.be.above(0);",
-            "});"
+            "pm.test('First Markdown upload is 201 or rerun is 200', function () { pm.expect([200, 201]).to.include(pm.response.code); });",
+            "const body = pm.response.json();",
+            "pm.expect(['INGESTED', 'ALREADY_INGESTED']).to.include(body.status);",
+            "if (body.status === 'INGESTED') pm.expect(body.chunkCount).to.be.above(0);",
+            "if (body.status === 'ALREADY_INGESTED') pm.expect(body.chunkCount).to.eql(0);"
           ] } }]
         },
         {
           "name": "Upload same Markdown again",
           "request": {
             "method": "POST",
-            "header": [],
             "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{markdownFile}}" }] },
             "url": "{{baseUrl}}/api/admin/documents"
           },
           "event": [{ "listen": "test", "script": { "exec": [
-            "pm.test('Duplicate upload returns 200', function () { pm.response.to.have.status(200); });",
-            "pm.test('Duplicate is reported', function () { pm.expect(pm.response.json().status).to.eql('ALREADY_INGESTED'); });"
+            "pm.test('Duplicate Markdown returns 200', function () { pm.response.to.have.status(200); });",
+            "pm.expect(pm.response.json().status).to.eql('ALREADY_INGESTED');"
           ] } }]
         },
         {
           "name": "Upload PDF document",
           "request": {
             "method": "POST",
-            "header": [],
             "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{pdfFile}}" }] },
             "url": "{{baseUrl}}/api/admin/documents"
           },
           "event": [{ "listen": "test", "script": { "exec": [
-            "pm.test('PDF upload returns 201', function () { pm.response.to.have.status(201); });",
-            "pm.test('PDF was indexed', function () {",
-            "  const body = pm.response.json();",
-            "  pm.expect(body.status).to.eql('INGESTED');",
-            "  pm.expect(body.chunkCount).to.be.above(0);",
-            "});"
+            "pm.test('PDF upload is 201 or rerun is 200', function () { pm.expect([200, 201]).to.include(pm.response.code); });",
+            "const body = pm.response.json();",
+            "pm.expect(['INGESTED', 'ALREADY_INGESTED']).to.include(body.status);",
+            "if (body.status === 'INGESTED') pm.expect(body.chunkCount).to.be.above(0);",
+            "if (body.status === 'ALREADY_INGESTED') pm.expect(body.chunkCount).to.eql(0);"
+          ] } }]
+        },
+        {
+          "name": "Upload same PDF again",
+          "request": {
+            "method": "POST",
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{pdfFile}}" }] },
+            "url": "{{baseUrl}}/api/admin/documents"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Duplicate PDF returns 200', function () { pm.response.to.have.status(200); });",
+            "pm.expect(pm.response.json().status).to.eql('ALREADY_INGESTED');"
           ] } }]
         },
         {
           "name": "List ingested documents",
-          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/admin/documents" },
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/admin/documents"
+          },
           "event": [{ "listen": "test", "script": { "exec": [
             "pm.test('Document list returns 200', function () { pm.response.to.have.status(200); });",
-            "pm.test('Both formats are present', function () {",
-            "  const formats = pm.response.json().map(function (item) { return item.format; });",
-            "  pm.expect(formats).to.include('MARKDOWN');",
-            "  pm.expect(formats).to.include('PDF');",
-            "});"
+            "const formats = pm.response.json().map(function (item) { return item.format; });",
+            "pm.expect(formats).to.include('MARKDOWN');",
+            "pm.expect(formats).to.include('PDF');"
           ] } }]
         },
         {
           "name": "Reject unsupported file type",
           "request": {
             "method": "POST",
-            "header": [],
             "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{unsupportedFile}}" }] },
             "url": "{{baseUrl}}/api/admin/documents"
           },
           "event": [{ "listen": "test", "script": { "exec": [
             "pm.test('Unsupported format is rejected', function () { pm.response.to.have.status(400); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Operations",
+      "item": [
+        {
+          "name": "Health",
+          "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Health is UP', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('UP'); });"
+          ] } }]
+        },
+        {
+          "name": "OpenAPI schema",
+          "request": { "method": "GET", "url": "{{baseUrl}}/v3/api-docs" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('OpenAPI schema returns 200', function () { pm.response.to.have.status(200); });"
           ] } }]
         }
       ]
