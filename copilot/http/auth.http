@@ -1,0 +1,18 @@
+### 1. Login as employee (saves the token for the next calls)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{"username": "employee1", "password": "Employee#123"}
+
+> {% client.global.set("token", response.body.accessToken); %}
+
+### 2. Protected call WITHOUT a token -> 401
+GET http://localhost:8080/api/auth/me
+
+### 3. Protected call WITH the token -> 200 and your identity
+GET http://localhost:8080/api/auth/me
+Authorization: Bearer {{token}}
+
+### 4. Employee on a supervisor endpoint -> 403
+GET http://localhost:8080/api/admin/documents
+Authorization: Bearer {{token}}
