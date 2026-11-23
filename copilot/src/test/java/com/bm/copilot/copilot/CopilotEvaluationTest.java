@@ -6,6 +6,7 @@ import com.bm.copilot.TestcontainersConfiguration;
 import com.bm.copilot.audit.AiUsageService;
 import com.bm.copilot.knowledge.evaluation.EvaluationRunner;
 import com.bm.copilot.knowledge.pipeline.Embedder;
+import com.bm.copilot.knowledge.pipeline.SpringAiEmbedder;
 import com.bm.copilot.knowledge.service.IngestionService;
 import com.bm.copilot.retrieval.ChunkSearchRepository;
 import com.bm.copilot.retrieval.Citation;
@@ -28,6 +29,9 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -37,9 +41,10 @@ import org.springframework.test.context.DynamicPropertySource;
  * Real-model evaluation of the copilot. Calls Gemini, so it only runs on demand:
  * <pre>./mvnw test -Dtest=CopilotEvaluationTest -Deval=true</pre>
  * Needs GEMINI_API_KEY (environment variable or copilot/.env) and Docker. Writes eval/copilot-results.md.
+ * Embeddings are cached in target/eval-embeddings.cache, so only the first run spends the embedding quota.
  */
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, CopilotEvaluationTest.CachedEmbedderConfiguration.class})
 @EnabledIfSystemProperty(named = "eval", matches = "true")
 class CopilotEvaluationTest {
 
@@ -94,7 +99,7 @@ class CopilotEvaluationTest {
     void evaluateCopilotAgainstTheRealModel() throws Exception {
         int chunks = ingestCorpus();
         List<EvalCase> cases = loadCases();
-        CachingEmbedder cachedEmbedder = new CachingEmbedder(embedder);
+        Embedder cachedEmbedder = embedder;
 
         List<SweepRow> sweep = new ArrayList<>();
         for (double threshold : THRESHOLDS) {
@@ -327,7 +332,7 @@ class CopilotEvaluationTest {
     }
 
     private double topSimilarity(EvalCase evalCase) {
-        List<RetrievedChunk> best = searchRepository.semanticSearch(embedderCache.get(evalCase.question()), 1);
+        List<RetrievedChunk> best = searchRepository.semanticSearch(embedder.embed(evalCase.question()), 1);
         return best.isEmpty() ? 0 : best.get(0).score();
     }
 
@@ -416,13 +421,73 @@ class CopilotEvaluationTest {
         throw new IllegalStateException("Set GEMINI_API_KEY in the environment or in copilot/.env to run the evaluation");
     }
 
-    private static final Map<String, float[]> embedderCache = new HashMap<>();
+    /**
+     * Keeps every embedding in target/eval-embeddings.cache, so a re-run does not embed the corpus again.
+     * The Gemini free tier allows 1000 embedding requests per day and one ingestion needs about 250.
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class CachedEmbedderConfiguration {
+        @Bean
+        @Primary
+        Embedder cachedEmbedder(SpringAiEmbedder gemini) {
+            return new DiskCachedEmbedder(gemini, Path.of("target/eval-embeddings.cache"));
+        }
+    }
 
-    /** Embeds each question once, so the threshold sweep and both runs cost no extra embedding calls. */
-    private record CachingEmbedder(Embedder delegate) implements Embedder {
+    static class DiskCachedEmbedder implements Embedder {
+        private final Embedder delegate;
+        private final Path file;
+        private final Map<String, float[]> cache = new HashMap<>();
+
+        DiskCachedEmbedder(Embedder delegate, Path file) {
+            this.delegate = delegate;
+            this.file = file;
+            try {
+                if (Files.exists(file)) {
+                    for (String line : Files.readAllLines(file)) {
+                        String[] parts = line.split("\t");
+                        String[] values = parts[1].split(",");
+                        float[] vector = new float[values.length];
+                        for (int i = 0; i < values.length; i++) {
+                            vector[i] = Float.parseFloat(values[i]);
+                        }
+                        cache.put(parts[0], vector);
+                    }
+                }
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+
         @Override
-        public float[] embed(String text) {
-            return embedderCache.computeIfAbsent(text, delegate::embed);
+        public synchronized float[] embed(String text) {
+            String key = sha256(text);
+            float[] cached = cache.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            float[] vector = delegate.embed(text);
+            cache.put(key, vector);
+            StringBuilder line = new StringBuilder(key).append('\t');
+            for (int i = 0; i < vector.length; i++) {
+                line.append(i == 0 ? "" : ",").append(vector[i]);
+            }
+            try {
+                Files.writeString(file, line.append('\n'), StandardCharsets.UTF_8,
+                        java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+            return vector;
+        }
+
+        private static String sha256(String text) {
+            try {
+                return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(text.getBytes(StandardCharsets.UTF_8)));
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new IllegalStateException(e);
+            }
         }
     }
 
