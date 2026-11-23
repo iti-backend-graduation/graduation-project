@@ -101,6 +101,19 @@ class CopilotServiceTest {
     }
 
     @Test
+    void cutOffModelReplyBecomesARefusal() {
+        when(retrievalService.search(anyString(), anyInt())).thenReturn(List.of(lostChunk));
+        modelReplies("""
+                {"answer":"Block the card, then verifies the customer's identity, asks about any unfamiliar transactions and lists them,
+                """);
+
+        AskResponse response = service.ask("What should an employee do when a card is reported stolen?");
+
+        assertThat(response.refused()).isTrue();
+        assertThat(response.answer()).isEqualTo(AskResponse.REFUSAL);
+    }
+
+    @Test
     void recordsTokenUsageOfTheModelCall() {
         when(retrievalService.search(anyString(), anyInt())).thenReturn(List.of(feeChunk));
         modelReplies("""
