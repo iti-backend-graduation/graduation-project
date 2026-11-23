@@ -13,6 +13,7 @@ import org.springframework.ai.chat.client.ResponseEntity;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
 
 /**
  * Plain grounded answering: retrieve, refuse early if there is no evidence, ask the model,
@@ -59,11 +60,17 @@ public class CopilotService {
             return AskResponse.refusal();
         }
 
-        ResponseEntity<ChatResponse, CopilotAnswer> response = chatClient.prompt()
-                .system(SYSTEM_PROMPT)
-                .user(buildUserMessage(question, sources))
-                .call()
-                .responseEntity(CopilotAnswer.class);
+        ResponseEntity<ChatResponse, CopilotAnswer> response;
+        try {
+            response = chatClient.prompt()
+                    .system(SYSTEM_PROMPT)
+                    .user(buildUserMessage(question, sources))
+                    .call()
+                    .responseEntity(CopilotAnswer.class);
+        } catch (JacksonException e) {
+            log.warn("Copilot refused: the model reply was not valid JSON ({})", e.getOriginalMessage());
+            return AskResponse.refusal();
+        }
         recordUsage(response.response());
 
         CopilotAnswer answer = response.entity();
