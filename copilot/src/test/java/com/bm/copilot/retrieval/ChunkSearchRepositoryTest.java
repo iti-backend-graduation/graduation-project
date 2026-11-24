@@ -75,6 +75,23 @@ class ChunkSearchRepositoryTest {
     }
 
     @Test
+    void equalScoresAreOrderedByDocumentNameAndChunkIndex() {
+        Document later = documentRepository.save(new Document(UUID.randomUUID(), "z-hotline.md", "MARKDOWN",
+                "c".repeat(64), 1, null, OffsetDateTime.now()));
+        Document earlier = documentRepository.save(new Document(UUID.randomUUID(), "a-hotline.md", "MARKDOWN",
+                "d".repeat(64), 1, null, OffsetDateTime.now()));
+        chunkRepository.save(new Chunk(UUID.randomUUID(), later, 0, "Call the hotline 16555.", null, "Contact", 4, vector(5)));
+        chunkRepository.save(new Chunk(UUID.randomUUID(), earlier, 0, "Call the hotline 16555.", null, "Contact", 4, vector(5)));
+        chunkRepository.flush();
+
+        List<RetrievedChunk> keyword = searchRepository.keywordSearch("hotline 16555", 5);
+        List<RetrievedChunk> semantic = searchRepository.semanticSearch(vector(5), 2);
+
+        assertThat(keyword).extracting(c -> c.citation().documentName()).startsWith("a-hotline.md", "z-hotline.md");
+        assertThat(semantic).extracting(c -> c.citation().documentName()).containsExactly("a-hotline.md", "z-hotline.md");
+    }
+
+    @Test
     void keywordSearchWithNoUsableWordsReturnsNothing() {
         assertThat(searchRepository.keywordSearch("?!", 5)).isEmpty();
     }
