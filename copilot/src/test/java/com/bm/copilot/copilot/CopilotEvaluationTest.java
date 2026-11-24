@@ -33,6 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -435,19 +436,27 @@ class CopilotEvaluationTest {
     static class CachedEmbedderConfiguration {
         @Bean
         @Primary
-        Embedder cachedEmbedder(SpringAiEmbedder gemini) {
-            return new DiskCachedEmbedder(gemini, Path.of("target/eval-embeddings.cache"));
+        Embedder cachedEmbedder(SpringAiEmbedder gemini, Environment env) {
+            String configuration = env.getProperty("spring.ai.google.genai.embedding.text.model") + "|"
+                    + env.getProperty("spring.ai.google.genai.embedding.text.dimensions") + "|"
+                    + env.getProperty("spring.ai.google.genai.embedding.text.task-type");
+            return new DiskCachedEmbedder(gemini, Path.of("target/eval-embeddings.cache"), configuration, 700);
         }
     }
 
+    /** The cache key covers the embedding configuration too, so changing the model never reuses old vectors. */
     static class DiskCachedEmbedder implements Embedder {
         private final Embedder delegate;
         private final Path file;
+        private final String configuration;
+        private final long pauseBeforeCallMs;
         private final Map<String, float[]> cache = new HashMap<>();
 
-        DiskCachedEmbedder(Embedder delegate, Path file) {
+        DiskCachedEmbedder(Embedder delegate, Path file, String configuration, long pauseBeforeCallMs) {
             this.delegate = delegate;
             this.file = file;
+            this.configuration = configuration;
+            this.pauseBeforeCallMs = pauseBeforeCallMs;
             try {
                 if (Files.exists(file)) {
                     for (String line : Files.readAllLines(file)) {
@@ -467,13 +476,13 @@ class CopilotEvaluationTest {
 
         @Override
         public synchronized float[] embed(String text) {
-            String key = sha256(text);
+            String key = sha256(configuration + "\n" + text);
             float[] cached = cache.get(key);
             if (cached != null) {
                 return cached;
             }
             try {
-                Thread.sleep(700);
+                Thread.sleep(pauseBeforeCallMs);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
