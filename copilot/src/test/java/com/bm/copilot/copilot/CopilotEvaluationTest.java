@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -150,10 +151,14 @@ class CopilotEvaluationTest {
         int answerable = 0;
         int wrongRefusals = 0;
         int correctRefusals = 0;
+        int semanticCoverage = 0;
         for (EvalCase evalCase : cases) {
             List<RetrievedChunk> sources = retrieval.search(evalCase.question(), CopilotService.TOP_K);
             if (evalCase.shouldAnswer()) {
                 answerable++;
+                if (topSimilarity(evalCase) >= threshold) {
+                    semanticCoverage++;
+                }
                 if (containsDocument(sources, evalCase.expectedDocument())) {
                     hits++;
                 }
@@ -164,17 +169,20 @@ class CopilotEvaluationTest {
                 correctRefusals++;
             }
         }
-        return new SweepRow(threshold, hits, answerable, wrongRefusals, correctRefusals);
+        return new SweepRow(threshold, hits, answerable, wrongRefusals, correctRefusals, semanticCoverage);
     }
 
     /**
-     * Keeps Hit@5 and wrong refusals at least as good as the baseline, then prefers more correct early refusals.
+     * Keeps Hit@5, wrong refusals and semantic coverage (answerable questions that still get at least one semantic hit)
+     * at least as good as the baseline, then prefers more correct early refusals.
+     * The coverage rule stops a high threshold from silently turning semantic search off and leaving only keywords.
      * Ties are broken by the middle of the tied range, so the value does not sit on the edge of what 21 cases allow.
      */
     static double chooseThreshold(List<SweepRow> sweep) {
         SweepRow base = sweep.stream().filter(row -> row.threshold() == BASELINE_THRESHOLD).findFirst().orElseThrow();
         List<SweepRow> safe = sweep.stream()
-                .filter(row -> row.hits() >= base.hits() && row.wrongRefusals() <= base.wrongRefusals())
+                .filter(row -> row.hits() >= base.hits() && row.wrongRefusals() <= base.wrongRefusals()
+                        && row.semanticCoverage() >= base.semanticCoverage())
                 .toList();
         int best = safe.stream().mapToInt(SweepRow::correctRefusals).max().orElse(base.correctRefusals());
         if (best <= base.correctRefusals()) {
@@ -251,25 +259,31 @@ class CopilotEvaluationTest {
 
         md.append("\n## Threshold sweep (retrieval only, no model calls)\n\n");
         md.append("An empty retrieval means the copilot refuses before calling the model.\n\n");
-        md.append("| min-similarity | Hit@5 (answerable) | Wrong early refusals | Correct early refusals |\n");
-        md.append("|---|---|---|---|\n");
+        md.append("| min-similarity | Hit@5 (answerable) | Semantic coverage (answerable) | Wrong early refusals | Correct early refusals |\n");
+        md.append("|---|---|---|---|---|\n");
         for (SweepRow row : sweep) {
             md.append("| ").append(row.threshold()).append(" | ").append(row.hits()).append('/').append(row.answerable())
+                    .append(" | ").append(row.semanticCoverage()).append('/').append(row.answerable())
                     .append(" | ").append(row.wrongRefusals()).append(" | ").append(row.correctRefusals()).append(" |\n");
         }
-        md.append("\nChosen: **").append(chosen).append("**. Rule: keep Hit@5 and wrong refusals at least as good as ")
-                .append("the baseline, then prefer more correct early refusals; ties take the middle of the tied range.\n");
+        md.append("\nChosen: **").append(chosen).append("**. Rule: keep Hit@5, wrong refusals and semantic coverage at least as good as the baseline, ")
+                .append("then prefer more correct early refusals; ties take the middle of the tied range. ")
+                .append("Semantic coverage counts answerable questions whose best semantic match is still above the threshold.\n");
 
-        md.append("\n## Per-case results (tuned)\n\n");
-        md.append("| Case | Category | Expected | Top similarity | Hit@5 | Result | Cited documents | Citation valid | Grounded | Notes |\n");
-        md.append("|---|---|---|---|---|---|---|---|---|---|\n");
-        for (CaseResult r : tuned) {
+        md.append("\n## Per-case results\n\n");
+        md.append("Hit@5, cited documents, citation validity, groundedness and notes are for the tuned run.\n\n");
+        md.append("| Case | Category | Expected | Top similarity | Baseline result | Tuned result | Hit@5 | Cited documents | Citation valid | Grounded | Notes |\n");
+        md.append("|---|---|---|---|---|---|---|---|---|---|---|\n");
+        for (int i = 0; i < tuned.size(); i++) {
+            CaseResult r = tuned.get(i);
+            CaseResult base = baseline.get(i);
             md.append("| ").append(r.evalCase().id())
                     .append(" | ").append(r.evalCase().category())
                     .append(" | ").append(r.evalCase().expectedBehavior())
                     .append(" | ").append(String.format(Locale.ROOT, "%.3f", topSimilarity(r.evalCase())))
-                    .append(" | ").append(r.evalCase().shouldAnswer() ? yesNo(r.hit5()) : "-")
+                    .append(" | ").append(base.refused() ? "REFUSED" : "ANSWERED")
                     .append(" | ").append(r.refused() ? "REFUSED" : "ANSWERED")
+                    .append(" | ").append(r.evalCase().shouldAnswer() ? yesNo(r.hit5()) : "-")
                     .append(" | ").append(String.join(", ", r.citedDocuments()))
                     .append(" | ").append(r.refused() ? "-" : yesNo(r.citationsValid()))
                     .append(" | ").append(r.judgement() == null ? "-" : yesNo(r.judgement().supported()))
@@ -300,21 +314,33 @@ class CopilotEvaluationTest {
     }
 
     private void summaryRows(List<CaseResult> baseline, List<CaseResult> tuned, StringBuilder md) {
-        md.append(row("Hit@1 (answerable)", countHit1(baseline), countHit1(tuned), answerable(tuned)));
-        md.append(row("Hit@5 (answerable)", count(baseline, CaseResult::hit5Answerable),
-                count(tuned, CaseResult::hit5Answerable), answerable(tuned)));
-        md.append(row("Answered when expected", count(baseline, CaseResult::correctAnswerOutcome),
-                count(tuned, CaseResult::correctAnswerOutcome), answerable(tuned)));
-        md.append(row("Wrong refusals of answerable questions", count(baseline, CaseResult::wrongRefusal),
-                count(tuned, CaseResult::wrongRefusal), answerable(tuned)));
-        md.append(row("Correct refusals", count(baseline, CaseResult::correctRefusal),
-                count(tuned, CaseResult::correctRefusal), tuned.size() - answerable(tuned)));
-        md.append(row("Citation validity (answered)", count(baseline, r -> !r.refused() && r.citationsValid()),
-                count(tuned, r -> !r.refused() && r.citationsValid()), answered(tuned)));
-        md.append(row("Cited the expected document (answered, answerable)", count(baseline, CaseResult::citedExpected),
-                count(tuned, CaseResult::citedExpected), count(tuned, r -> !r.refused() && r.evalCase().shouldAnswer())));
-        md.append(row("Grounded answers (judge, answered)", count(baseline, CaseResult::grounded),
-                count(tuned, CaseResult::grounded), answered(tuned)));
+        md.append(row("Hit@1 (answerable)", baseline, tuned, CopilotEvaluationTest::hit1, r -> r.evalCase().shouldAnswer()));
+        md.append(row("Hit@5 (answerable)", baseline, tuned, CaseResult::hit5, r -> r.evalCase().shouldAnswer()));
+        md.append(row("Answered when expected", baseline, tuned, r -> !r.refused(), r -> r.evalCase().shouldAnswer()));
+        md.append(row("Wrong refusals of answerable questions", baseline, tuned, CaseResult::refused,
+                r -> r.evalCase().shouldAnswer()));
+        md.append(row("Correct refusals", baseline, tuned, CaseResult::refused, r -> !r.evalCase().shouldAnswer()));
+        md.append(row("Citation validity (answered)", baseline, tuned, CaseResult::citationsValid, r -> !r.refused()));
+        md.append(row("Cited the expected document (answered, answerable)", baseline, tuned,
+                r -> r.citedDocuments().contains(r.evalCase().expectedDocument()),
+                r -> !r.refused() && r.evalCase().shouldAnswer()));
+        md.append(row("Grounded answers (judge, answered)", baseline, tuned, CaseResult::grounded, r -> !r.refused()));
+    }
+
+    /** One summary row: how many in-scope cases pass the check, with each run's own total. */
+    private static String row(String metric, List<CaseResult> baseline, List<CaseResult> tuned,
+                              Predicate<CaseResult> passes, Predicate<CaseResult> inScope) {
+        return "| " + metric + " | " + score(baseline, passes, inScope) + " | " + score(tuned, passes, inScope) + " |\n";
+    }
+
+    private static String score(List<CaseResult> results, Predicate<CaseResult> passes, Predicate<CaseResult> inScope) {
+        List<CaseResult> scope = results.stream().filter(inScope).toList();
+        return scope.stream().filter(passes).count() + "/" + scope.size();
+    }
+
+    private static boolean hit1(CaseResult r) {
+        return !r.sources().isEmpty()
+                && r.sources().get(0).citation().documentName().equals(r.evalCase().expectedDocument());
     }
 
     private EvaluationRunner.EvaluationReport runnerReport(List<CaseResult> results) {
@@ -357,7 +383,7 @@ class CopilotEvaluationTest {
 
     private static String notes(CaseResult r) {
         List<String> notes = new ArrayList<>();
-        if (r.wrongRefusal()) {
+        if (r.evalCase().shouldAnswer() && r.refused()) {
             notes.add(r.sources().isEmpty() ? "refused: nothing retrieved" : "refused although evidence was retrieved");
         }
         if (!r.evalCase().shouldAnswer() && !r.refused()) {
@@ -373,27 +399,6 @@ class CopilotEvaluationTest {
             notes.add("FOLLOWED THE INJECTED INSTRUCTION");
         }
         return String.join("; ", notes);
-    }
-
-    private static String row(String metric, int baseline, int tuned, int total) {
-        return "| " + metric + " | " + baseline + "/" + total + " | " + tuned + "/" + total + " |\n";
-    }
-
-    private static int count(List<CaseResult> results, java.util.function.Predicate<CaseResult> test) {
-        return (int) results.stream().filter(test).count();
-    }
-
-    private static int countHit1(List<CaseResult> results) {
-        return count(results, r -> r.evalCase().shouldAnswer() && !r.sources().isEmpty()
-                && r.sources().get(0).citation().documentName().equals(r.evalCase().expectedDocument()));
-    }
-
-    private static int answerable(List<CaseResult> results) {
-        return count(results, r -> r.evalCase().shouldAnswer());
-    }
-
-    private static int answered(List<CaseResult> results) {
-        return count(results, r -> !r.refused());
     }
 
     private static String yesNo(boolean value) {
@@ -423,7 +428,8 @@ class CopilotEvaluationTest {
 
     /**
      * Keeps every embedding in target/eval-embeddings.cache, so a re-run does not embed the corpus again.
-     * The Gemini free tier allows 1000 embedding requests per day and one ingestion needs about 250.
+     * The Gemini free tier allows 1000 embedding requests per day (one ingestion needs about 250) and 100 per minute,
+     * so new embeddings are spaced 0.7 s apart.
      */
     @TestConfiguration(proxyBeanMethods = false)
     static class CachedEmbedderConfiguration {
@@ -466,6 +472,11 @@ class CopilotEvaluationTest {
             if (cached != null) {
                 return cached;
             }
+            try {
+                Thread.sleep(700);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             float[] vector = delegate.embed(text);
             cache.put(key, vector);
             StringBuilder line = new StringBuilder(key).append('\t');
@@ -497,7 +508,8 @@ class CopilotEvaluationTest {
         }
     }
 
-    record SweepRow(double threshold, int hits, int answerable, int wrongRefusals, int correctRefusals) {
+    record SweepRow(double threshold, int hits, int answerable, int wrongRefusals, int correctRefusals,
+                    int semanticCoverage) {
     }
 
     record Judgement(boolean supported, List<String> unsupportedClaims) {
@@ -508,26 +520,6 @@ class CopilotEvaluationTest {
 
         boolean hit5() {
             return containsDocument(sources, evalCase.expectedDocument());
-        }
-
-        boolean hit5Answerable() {
-            return evalCase.shouldAnswer() && hit5();
-        }
-
-        boolean correctAnswerOutcome() {
-            return evalCase.shouldAnswer() && !refused;
-        }
-
-        boolean wrongRefusal() {
-            return evalCase.shouldAnswer() && refused;
-        }
-
-        boolean correctRefusal() {
-            return !evalCase.shouldAnswer() && refused;
-        }
-
-        boolean citedExpected() {
-            return !refused && evalCase.shouldAnswer() && citedDocuments().contains(evalCase.expectedDocument());
         }
 
         boolean grounded() {
