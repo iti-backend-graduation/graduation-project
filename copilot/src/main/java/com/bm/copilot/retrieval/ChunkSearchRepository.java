@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 /**
  * The two raw searches over the chunk table. Every value is a bound parameter, never concatenated into SQL.
+ * Equal scores are ordered by file name and chunk index, so results do not depend on the query plan.
  */
 @Repository
 public class ChunkSearchRepository {
@@ -30,7 +31,7 @@ public class ChunkSearchRepository {
                      , 1 - (c.embedding <=> CAST(:embedding AS vector)) AS score
                 FROM chunk c
                 JOIN document d ON d.id = c.document_id
-                ORDER BY c.embedding <=> CAST(:embedding AS vector)
+                ORDER BY c.embedding <=> CAST(:embedding AS vector), d.file_name, c.chunk_index
                 LIMIT :limit
                 """;
         return jdbcClient.sql(sql)
@@ -54,7 +55,7 @@ public class ChunkSearchRepository {
                 FROM chunk c
                 JOIN document d ON d.id = c.document_id
                 WHERE c.tsv @@ to_tsquery('english', :query)
-                ORDER BY score DESC
+                ORDER BY score DESC, d.file_name, c.chunk_index
                 LIMIT :limit
                 """;
         return jdbcClient.sql(sql)
