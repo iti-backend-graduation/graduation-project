@@ -1,5 +1,6 @@
 package com.bm.copilot.audit;
 
+import com.bm.copilot.common.CorrelationId;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -10,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 class DatabaseAiUsageService implements AiUsageService {
 
     /** The logging-context key the correlation ID filter (B3) fills for every request. */
-    static final String CORRELATION_ID_KEY = "correlationId";
+    static final String CORRELATION_ID_KEY = CorrelationId.KEY;
 
     private final AiUsageRepository repository;
     private final AiUsagePricing pricing;
