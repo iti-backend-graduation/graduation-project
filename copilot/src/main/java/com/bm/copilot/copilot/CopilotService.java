@@ -50,7 +50,11 @@ public class CopilotService {
     }
 
     public AskResponse ask(String question) {
-        return answer(question, retrievalService.search(question, TOP_K));
+        return answer(question, retrieve(question));
+    }
+
+    public List<RetrievedChunk> retrieve(String question) {
+        return retrievalService.search(question, TOP_K);
     }
 
     /** Answers from evidence that was already retrieved. Also used by the orchestrator. */
@@ -84,7 +88,7 @@ public class CopilotService {
                 .map(id -> sources.get(id - 1).citation())
                 .distinct()
                 .toList();
-        return new AskResponse(answer.answer(), citations, false, answer.suggestServiceRequest());
+        return new AskResponse(answer.answer(), citations, false, answer.suggestServiceRequest(), null);
     }
 
     static String buildUserMessage(String question, List<RetrievedChunk> sources) {
