@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.bm.copilot.TestcontainersConfiguration;
+import com.bm.copilot.copilot.agent.CopilotOrchestrator;
+import com.bm.copilot.copilot.agent.RequestDraft;
 import com.bm.copilot.retrieval.Citation;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -29,7 +31,7 @@ class CopilotControllerTest {
     MockMvc mockMvc;
 
     @MockitoBean
-    CopilotService copilotService;
+    CopilotOrchestrator orchestrator;
 
     @Test
     void askWithoutATokenIsRejected() throws Exception {
@@ -40,8 +42,9 @@ class CopilotControllerTest {
 
     @Test
     void employeeGetsTheAnswerWithCitations() throws Exception {
-        when(copilotService.ask(anyString())).thenReturn(new AskResponse("The fee is 100 EGP.",
-                List.of(new Citation("16-synthetic-fee-schedule.pdf", 2, "Card fees")), false, true));
+        when(orchestrator.ask(anyString())).thenReturn(new AskResponse("The fee is 100 EGP.",
+                List.of(new Citation("16-synthetic-fee-schedule.pdf", 2, "Card fees")), false, true,
+                new RequestDraft("CARD_SERVICE", "Card replacement", List.of("customerReference"))));
 
         mockMvc.perform(post("/api/copilot/ask").with(employee()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"question\":\"How much is a card replacement?\"}"))
@@ -50,7 +53,8 @@ class CopilotControllerTest {
                 .andExpect(jsonPath("$.citations[0].documentName").value("16-synthetic-fee-schedule.pdf"))
                 .andExpect(jsonPath("$.citations[0].page").value(2))
                 .andExpect(jsonPath("$.refused").value(false))
-                .andExpect(jsonPath("$.suggestServiceRequest").value(true));
+                .andExpect(jsonPath("$.suggestServiceRequest").value(true))
+                .andExpect(jsonPath("$.requestDraft.category").value("CARD_SERVICE"));
     }
 
     @Test
