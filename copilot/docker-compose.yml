@@ -16,5 +16,21 @@ services:
       timeout: 3s
       retries: 10
 
+  app:
+    build: .
+    container_name: copilot-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Inside Docker the database host is the service name "db", not localhost
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-copilot}
+      DB_USER: ${DB_USER:-copilot}
+      DB_PASSWORD: ${DB_PASSWORD:-copilot}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (at least 32 characters) in your .env file}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "8080:8080"
+
 volumes:
-      copilot-db-data:
+  copilot-db-data:
