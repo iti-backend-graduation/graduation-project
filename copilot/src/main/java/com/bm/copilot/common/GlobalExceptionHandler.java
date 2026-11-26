@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /** Turns exceptions into the standard {@link ApiError} response. The only place that maps exceptions to HTTP status codes. */
 @RestControllerAdvice
@@ -75,6 +76,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.retryAfterSeconds()))
                 .body(body);
+    }
+
+    @ExceptionHandler({PayloadTooLargeException.class, MaxUploadSizeExceededException.class})
+    ResponseEntity<ApiError> handlePayloadTooLarge(Exception ex, HttpServletRequest request) {
+        return build(HttpStatus.valueOf(413), "PAYLOAD_TOO_LARGE", "Request is too large", request);
     }
 
     /** Last resort: log the real cause, but never show it to the client. */
