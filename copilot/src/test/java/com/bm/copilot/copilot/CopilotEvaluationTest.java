@@ -208,12 +208,14 @@ class CopilotEvaluationTest {
 
             boolean citationsValid = response.citations().stream()
                     .allMatch(citation -> sources.stream().anyMatch(s -> s.citation().equals(citation)));
+            // A clarifying question is not an answer: it counts like a refusal here.
+            boolean answered = !response.refused() && !response.needsClarification();
             Judgement judgement = null;
-            if (!response.refused()) {
+            if (answered) {
                 judgement = judge(judge, response, sources);
                 Thread.sleep(PAUSE_BETWEEN_MODEL_CALLS_MS);
             }
-            results.add(new CaseResult(evalCase, sources, response.answer(), response.refused(),
+            results.add(new CaseResult(evalCase, sources, response.answer(), !answered,
                     response.citations(), citationsValid, judgement));
         }
         return results;
@@ -410,7 +412,7 @@ class CopilotEvaluationTest {
         return String.format(Locale.ROOT, "%.0f%%", value * 100);
     }
 
-    private static String readGeminiKey() {
+    static String readGeminiKey() {
         String key = System.getenv("GEMINI_API_KEY");
         if (key != null && !key.isBlank()) {
             return key;
