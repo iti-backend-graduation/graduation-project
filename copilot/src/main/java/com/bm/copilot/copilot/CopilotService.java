@@ -34,6 +34,10 @@ public class CopilotService {
             If the sources do not contain the answer, set refused to true and leave citedSourceIds empty.
             Set suggestServiceRequest to true only when the employee would need to open a service request
             for the customer (for example a card replacement, a dispute or an account change).
+            If the sources give different answers depending on a detail the question does not state
+            (for example which card, account or fee), do not guess: put one short question asking for that
+            detail in clarificationQuestion, set refused to false and leave answer and citedSourceIds empty.
+            Otherwise leave clarificationQuestion empty.
             """;
 
     private static final Logger log = LoggerFactory.getLogger(CopilotService.class);
@@ -78,6 +82,11 @@ public class CopilotService {
         recordUsage(response.response());
 
         CopilotAnswer answer = response.entity();
+        if (answer != null && !answer.refused() && answer.clarificationQuestion() != null
+                && !answer.clarificationQuestion().isBlank()) {
+            log.info("Copilot asked a clarifying question");
+            return AskResponse.clarification(answer.clarificationQuestion().strip());
+        }
         if (answer == null || answer.refused() || !citesOnlyGivenSources(answer, sources.size())) {
             log.info("Copilot refused: model refused or cited unknown sources");
             return AskResponse.refusal();
@@ -88,7 +97,7 @@ public class CopilotService {
                 .map(id -> sources.get(id - 1).citation())
                 .distinct()
                 .toList();
-        return new AskResponse(answer.answer(), citations, false, answer.suggestServiceRequest(), null);
+        return new AskResponse(answer.answer(), citations, false, answer.suggestServiceRequest(), null, null);
     }
 
     static String buildUserMessage(String question, List<RetrievedChunk> sources) {

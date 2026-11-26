@@ -31,7 +31,7 @@ class CopilotOrchestratorTest {
     private static final RetrievedChunk FEE_CHUNK =
             new RetrievedChunk(UUID.randomUUID(), "The card replacement fee is 100 EGP.", FEES, 0.03);
     private static final AskResponse FEE_ANSWER =
-            new AskResponse("The fee is 100 EGP.", List.of(FEES), false, false, null);
+            new AskResponse("The fee is 100 EGP.", List.of(FEES), false, false, null, null);
 
     private final RetrievalAgent retrievalAgent = mock(RetrievalAgent.class);
     private final PolicyCheckAgent policyCheckAgent = mock(PolicyCheckAgent.class);
@@ -86,6 +86,20 @@ class CopilotOrchestratorTest {
     }
 
     @Test
+    void clarifyingQuestionEndsTheRunWithoutAPolicyCheckOrDraft() {
+        AskResponse clarification = AskResponse.clarification("Which card is it, debit or credit?");
+        when(retrievalAgent.run(any())).thenReturn(List.of(FEE_CHUNK));
+        when(copilotService.answer(anyString(), anyList())).thenReturn(clarification);
+
+        AskResponse response = orchestrator.ask("What is the card limit?");
+
+        assertThat(response).isEqualTo(clarification);
+        verify(copilotService, times(1)).answer(anyString(), anyList());
+        verify(policyCheckAgent, never()).run(any());
+        verify(requestPreparationAgent, never()).run(any());
+    }
+
+    @Test
     void failingAgentFallsBackToThePlainFlow() {
         when(retrievalAgent.run(any())).thenThrow(new IllegalStateException("database down"));
         when(copilotService.retrieve(anyString())).thenReturn(List.of(FEE_CHUNK));
@@ -133,7 +147,7 @@ class CopilotOrchestratorTest {
 
     @Test
     void attachesARequestDraftOnlyWhenTheAnswerSuggestsARequest() {
-        AskResponse suggestsRequest = new AskResponse("Raise a card replacement request.", List.of(FEES), false, true, null);
+        AskResponse suggestsRequest = new AskResponse("Raise a card replacement request.", List.of(FEES), false, true, null, null);
         RequestDraft draft = new RequestDraft("CARD_SERVICE", "Card replacement", List.of("customerReference"));
         when(retrievalAgent.run(any())).thenReturn(List.of(FEE_CHUNK));
         when(copilotService.answer(anyString(), anyList())).thenReturn(suggestsRequest);

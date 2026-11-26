@@ -44,7 +44,7 @@ class CopilotControllerTest {
     void employeeGetsTheAnswerWithCitations() throws Exception {
         when(orchestrator.ask(anyString())).thenReturn(new AskResponse("The fee is 100 EGP.",
                 List.of(new Citation("16-synthetic-fee-schedule.pdf", 2, "Card fees")), false, true,
-                new RequestDraft("CARD_SERVICE", "Card replacement", List.of("customerReference"))));
+                new RequestDraft("CARD_SERVICE", "Card replacement", List.of("customerReference")), null));
 
         mockMvc.perform(post("/api/copilot/ask").with(employee()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"question\":\"How much is a card replacement?\"}"))

@@ -23,7 +23,8 @@ import org.springframework.stereotype.Service;
  * when the answer suggests one.
  * <ul>
  *   <li>At most {@value #MAX_ATTEMPTS} attempts; the second and third search wider. The run ends when an answer
- *       passes the policy check or the model refuses; after the last failed check it refuses.</li>
+ *       passes the policy check, the model refuses, or the model asks a clarifying question (there is no claim
+ *       to check yet); after the last failed check it refuses.</li>
  *   <li>Every step has a timeout. Any failure or timeout falls back to the plain answer flow, which is still
  *       policy-checked.</li>
  *   <li>Agents only read and draft: nothing here can submit, approve or execute a service request.</li>
@@ -69,8 +70,8 @@ public class CopilotOrchestrator {
             int topK = attempt == 1 ? FIRST_TOP_K : RETRY_TOP_K;
             List<RetrievedChunk> evidence = step("retrieval", () -> retrievalAgent.run(new RetrievalAgent.Query(question, topK)));
             AskResponse answer = step("answer", () -> copilotService.answer(question, evidence));
-            if (answer.refused()) {
-                log.info("Orchestrator attempt {}: model refused", attempt);
+            if (answer.refused() || answer.needsClarification()) {
+                log.info("Orchestrator attempt {}: model refused or asked a clarifying question", attempt);
                 return answer;
             }
             ValidationResult check = step("policy-check",
@@ -97,7 +98,7 @@ public class CopilotOrchestrator {
     private AskResponse fallback(String question) {
         List<RetrievedChunk> evidence = copilotService.retrieve(question);
         AskResponse answer = copilotService.answer(question, evidence);
-        if (answer.refused()) {
+        if (answer.refused() || answer.needsClarification()) {
             return answer;
         }
         ValidationResult check = policyCheckAgent.run(new PolicyCheckAgent.Input(answer.answer(), citedEvidence(answer, evidence)));

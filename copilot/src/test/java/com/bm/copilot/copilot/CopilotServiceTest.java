@@ -101,6 +101,33 @@ class CopilotServiceTest {
     }
 
     @Test
+    void ambiguousQuestionReturnsTheModelsClarifyingQuestion() {
+        when(retrievalService.search(anyString(), anyInt())).thenReturn(List.of(feeChunk, lostChunk));
+        modelReplies("""
+                {"answer":"","citedSourceIds":[],"refused":false,"suggestServiceRequest":false,
+                 "clarificationQuestion":"Which card is it, debit or credit?"}
+                """);
+
+        AskResponse response = service.ask("What is the card limit?");
+
+        assertThat(response.refused()).isFalse();
+        assertThat(response.clarificationQuestion()).isEqualTo("Which card is it, debit or credit?");
+        assertThat(response.answer()).isEqualTo("Which card is it, debit or credit?");
+        assertThat(response.citations()).isEmpty();
+        assertThat(response.suggestServiceRequest()).isFalse();
+    }
+
+    @Test
+    void clearAnswerHasNoClarifyingQuestion() {
+        when(retrievalService.search(anyString(), anyInt())).thenReturn(List.of(feeChunk));
+        modelReplies("""
+                {"answer":"100 EGP [1]","citedSourceIds":[1],"refused":false,"suggestServiceRequest":false}
+                """);
+
+        assertThat(service.ask("How much is a card replacement?").clarificationQuestion()).isNull();
+    }
+
+    @Test
     void cutOffModelReplyBecomesARefusal() {
         when(retrievalService.search(anyString(), anyInt())).thenReturn(List.of(lostChunk));
         modelReplies("""
