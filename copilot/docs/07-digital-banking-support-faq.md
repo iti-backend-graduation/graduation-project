@@ -77,10 +77,14 @@ The employee cannot decide this. A completed transfer cannot be reversed by the 
 
 ## 6. Other Questions
 
-### 6.1 Can a customer have a higher transfer limit than EGP 100,000 per day?
+### 6.1 What is the BM Digital Contact Center hotline?
+
+The BM Digital Contact Center hotline is **16555** and is available 24 hours a day, 7 days a week. Customers can call this number for supported digital banking help or to report suspicious activity. Employees must not promise a resolution time or disclose account information until the customer's identity has been verified.
+
+### 6.2 Can a customer have a higher transfer limit than EGP 100,000 per day?
 
 The employee cannot grant this and the standard limits are not changed at branch level. Escalate to Digital Support if the customer insists, and meanwhile suggest splitting the payment across days or using the branch.
 
-### 6.2 The customer sees a transaction they did not make. What now?
+### 6.3 The customer sees a transaction they did not make. What now?
 
 Treat it as suspicious activity. Verify the ID, tell the customer to reset the password and to call the Contact Center hotline 16555 immediately, raise an urgent DIGITAL_BANKING service request and inform the supervisor. Do not state who is liable.

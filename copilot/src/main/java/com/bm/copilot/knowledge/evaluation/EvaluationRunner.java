@@ -8,7 +8,7 @@ public class EvaluationRunner {
         Objects.requireNonNull(cases, "cases");
         Objects.requireNonNull(evaluator, "evaluator");
         if (cases.isEmpty()) {
-            return new EvaluationReport(0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return new EvaluationReport(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
 
         int retrievalCases = 0;
@@ -16,6 +16,8 @@ public class EvaluationRunner {
         int groundedAnswers = 0;
         int correctRefusals = 0;
         int expectedRefusals = 0;
+        int correctClarifications = 0;
+        int expectedClarifications = 0;
         int correctAnswers = 0;
         int expectedAnswers = 0;
         int answeredCases = 0;
@@ -27,26 +29,38 @@ public class EvaluationRunner {
                     retrievalHits++;
                 }
             }
-            if (observation.answered()) {
+            if (observation.outcome() == ResponseOutcome.ANSWER) {
                 answeredCases++;
                 if (observation.citationsGrounded()) {
                     groundedAnswers++;
                 }
             }
-            if ("REFUSE".equals(evaluationCase.expectedBehavior())) {
-                expectedRefusals++;
-                if (!observation.answered()) {
-                    correctRefusals++;
+            switch (evaluationCase.expectedBehavior()) {
+                case "ANSWER" -> {
+                    expectedAnswers++;
+                    if (observation.outcome() == ResponseOutcome.ANSWER) {
+                        correctAnswers++;
+                    }
                 }
-            } else if ("ANSWER".equals(evaluationCase.expectedBehavior())) {
-                expectedAnswers++;
-                if (observation.answered()) {
-                    correctAnswers++;
+                case "REFUSE" -> {
+                    expectedRefusals++;
+                    if (observation.outcome() == ResponseOutcome.REFUSE) {
+                        correctRefusals++;
+                    }
                 }
+                case "CLARIFY" -> {
+                    expectedClarifications++;
+                    if (observation.outcome() == ResponseOutcome.CLARIFY) {
+                        correctClarifications++;
+                    }
+                }
+                default -> throw new IllegalArgumentException(
+                        "Unsupported expected behavior: " + evaluationCase.expectedBehavior());
             }
         }
         return new EvaluationReport(cases.size(), retrievalCases, retrievalHits, groundedAnswers,
-                answeredCases, correctRefusals, expectedRefusals, correctAnswers, expectedAnswers);
+                answeredCases, correctRefusals, expectedRefusals, correctClarifications,
+                expectedClarifications, correctAnswers, expectedAnswers);
     }
 
     @FunctionalInterface
@@ -57,18 +71,28 @@ public class EvaluationRunner {
     public record EvaluationCase(String question, String expectedDocument, String expectedBehavior) {
     }
 
-    public record EvaluationObservation(List<String> documents, boolean answered, boolean citationsGrounded) {
+    public enum ResponseOutcome {
+        ANSWER,
+        REFUSE,
+        CLARIFY
+    }
+
+    public record EvaluationObservation(
+            List<String> documents, ResponseOutcome outcome, boolean citationsGrounded) {
         public EvaluationObservation {
             documents = documents == null ? List.of() : List.copyOf(documents);
+            Objects.requireNonNull(outcome, "outcome");
         }
 
         public EvaluationObservation(String document, boolean answered, boolean citationsGrounded) {
-            this(document == null ? List.of() : List.of(document), answered, citationsGrounded);
+            this(document == null ? List.of() : List.of(document),
+                    answered ? ResponseOutcome.ANSWER : ResponseOutcome.REFUSE, citationsGrounded);
         }
     }
 
     public record EvaluationReport(int cases, int retrievalCases, int retrievalHits, int groundedAnswers,
                                    int answeredCases, int correctRefusals, int expectedRefusals,
+                                   int correctClarifications, int expectedClarifications,
                                    int correctAnswers, int expectedAnswers) {
         public double retrievalHitRate() {
             return percentage(retrievalHits, retrievalCases);
@@ -84,6 +108,11 @@ public class EvaluationRunner {
 
         public double answerBehaviorCorrectness() {
             return expectedAnswers == 0 ? 1 : (double) correctAnswers / expectedAnswers;
+        }
+
+        public double clarificationCorrectness() {
+            return expectedClarifications == 0 ? 1
+                    : (double) correctClarifications / expectedClarifications;
         }
 
         private double percentage(int value, int total) {

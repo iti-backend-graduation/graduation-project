@@ -173,7 +173,7 @@ class CopilotEvaluationTest {
                 if (sources.isEmpty()) {
                     wrongRefusals++;
                 }
-            } else if (sources.isEmpty()) {
+            } else if (evalCase.shouldRefuse() && sources.isEmpty()) {
                 correctRefusals++;
             }
         }
@@ -223,14 +223,13 @@ class CopilotEvaluationTest {
 
             boolean citationsValid = response.citations().stream()
                     .allMatch(citation -> sources.stream().anyMatch(s -> s.citation().equals(citation)));
-            // A clarifying question is not an answer: it counts like a refusal here.
             boolean answered = !response.refused() && !response.needsClarification();
             Judgement judgement = null;
             if (answered) {
                 judgement = judge(judge, response, sources);
                 Thread.sleep(PAUSE_BETWEEN_MODEL_CALLS_MS);
             }
-            results.add(new CaseResult(evalCase, sources, response.answer(), !answered,
+            results.add(new CaseResult(evalCase, sources, response.answer(), outcome(response),
                     response.citations(), citationsValid, judgement));
         }
         return results;
@@ -272,8 +271,12 @@ class CopilotEvaluationTest {
                 .append(" | ").append(pct(tunedB.retrievalHitRate())).append(" |\n");
         md.append("| groundedness (Gemini judge, answered cases) | ").append(pct(baseB.groundedness()))
                 .append(" | ").append(pct(tunedB.groundedness())).append(" |\n");
-        md.append("| refusalCorrectness | ").append(pct(baseB.refusalCorrectness()))
+        md.append("| refusalCorrectness (actual refusals; REFUSE expected) | ")
+                .append(pct(baseB.refusalCorrectness()))
                 .append(" | ").append(pct(tunedB.refusalCorrectness())).append(" |\n");
+        md.append("| clarificationCorrectness (CLARIFY expected) | ")
+                .append(pct(baseB.clarificationCorrectness()))
+                .append(" | ").append(pct(tunedB.clarificationCorrectness())).append(" |\n");
         md.append("| answerBehaviorCorrectness (answers returned for answerable cases) | ")
                 .append(pct(baseB.answerBehaviorCorrectness()))
                 .append(" | ").append(pct(tunedB.answerBehaviorCorrectness())).append(" |\n");
@@ -302,11 +305,11 @@ class CopilotEvaluationTest {
                     .append(" | ").append(r.evalCase().category())
                     .append(" | ").append(r.evalCase().expectedBehavior())
                     .append(" | ").append(String.format(Locale.ROOT, "%.3f", topSimilarity(r.evalCase())))
-                    .append(" | ").append(base.refused() ? "REFUSED" : "ANSWERED")
-                    .append(" | ").append(r.refused() ? "REFUSED" : "ANSWERED")
+                    .append(" | ").append(base.outcome())
+                    .append(" | ").append(r.outcome())
                     .append(" | ").append(r.evalCase().shouldAnswer() ? yesNo(r.hit5()) : "-")
                     .append(" | ").append(String.join(", ", r.citedDocuments()))
-                    .append(" | ").append(r.refused() ? "-" : yesNo(r.citationsValid()))
+                    .append(" | ").append(r.answered() ? yesNo(r.citationsValid()) : "-")
                     .append(" | ").append(r.judgement() == null ? "-" : yesNo(r.judgement().supported()))
                     .append(" | ").append(notes(r))
                     .append(" |\n");
@@ -323,7 +326,7 @@ class CopilotEvaluationTest {
         md.append("- Groundedness is judged by the same model family (Gemini); it is a second opinion, not ground truth. ")
                 .append("Read the answers above to confirm.\n");
         md.append("- EvaluationRunner retrieval hit rate is expected-document-in-top-5 over cases with an expected document; ")
-                .append("answerable-case correctness and expected-refusal correctness have separate denominators.\n");
+                .append("answer, refusal and clarification outcomes have separate expectations and denominators.\n");
         md.append("- Markdown documents have no page numbers, so they are cited by section; the expected page in `cases.json` ")
                 .append("is not checked.\n");
         md.append("- 10 cases in `eval/cases.json` (workflow, authorization, duplicate execution, agent failure, incomplete ")
@@ -334,15 +337,20 @@ class CopilotEvaluationTest {
     private void summaryRows(List<CaseResult> baseline, List<CaseResult> tuned, StringBuilder md) {
         md.append(row("Hit@1 (answerable)", baseline, tuned, CopilotEvaluationTest::hit1, r -> r.evalCase().shouldAnswer()));
         md.append(row("Hit@5 (answerable)", baseline, tuned, CaseResult::hit5, r -> r.evalCase().shouldAnswer()));
-        md.append(row("Answered when expected", baseline, tuned, r -> !r.refused(), r -> r.evalCase().shouldAnswer()));
+        md.append(row("Answered when expected", baseline, tuned, CaseResult::answered,
+                r -> r.evalCase().shouldAnswer()));
         md.append(row("Wrong refusals of answerable questions", baseline, tuned, CaseResult::refused,
                 r -> r.evalCase().shouldAnswer()));
-        md.append(row("Correct refusals", baseline, tuned, CaseResult::refused, r -> !r.evalCase().shouldAnswer()));
-        md.append(row("Citation validity (answered)", baseline, tuned, CaseResult::citationsValid, r -> !r.refused()));
+        md.append(row("Correct refusals", baseline, tuned, CaseResult::refused, r -> r.evalCase().shouldRefuse()));
+        md.append(row("Correct clarifications", baseline, tuned, CaseResult::clarified,
+                r -> r.evalCase().shouldClarify()));
+        md.append(row("Citation validity (answered)", baseline, tuned, CaseResult::citationsValid,
+                CaseResult::answered));
         md.append(row("Cited the expected document (answered, answerable)", baseline, tuned,
                 r -> r.citedDocuments().contains(r.evalCase().expectedDocument()),
-                r -> !r.refused() && r.evalCase().shouldAnswer()));
-        md.append(row("Grounded answers (judge, answered)", baseline, tuned, CaseResult::grounded, r -> !r.refused()));
+                r -> r.answered() && r.evalCase().shouldAnswer()));
+        md.append(row("Grounded answers (judge, answered)", baseline, tuned, CaseResult::grounded,
+                CaseResult::answered));
     }
 
     /** One summary row: how many in-scope cases pass the check, with each run's own total. */
@@ -375,8 +383,18 @@ class CopilotEvaluationTest {
                     .distinct()
                     .toList();
             return new EvaluationRunner.EvaluationObservation(
-                    documents, !r.refused(), r.judgement() != null && r.judgement().supported());
+                    documents, r.outcome(), r.judgement() != null && r.judgement().supported());
         });
+    }
+
+    private static EvaluationRunner.ResponseOutcome outcome(AskResponse response) {
+        if (response.refused()) {
+            return EvaluationRunner.ResponseOutcome.REFUSE;
+        }
+        if (response.needsClarification()) {
+            return EvaluationRunner.ResponseOutcome.CLARIFY;
+        }
+        return EvaluationRunner.ResponseOutcome.ANSWER;
     }
 
     private double topSimilarity(EvalCase evalCase) {
@@ -405,11 +423,16 @@ class CopilotEvaluationTest {
 
     private static String notes(CaseResult r) {
         List<String> notes = new ArrayList<>();
-        if (r.evalCase().shouldAnswer() && r.refused()) {
-            notes.add(r.sources().isEmpty() ? "refused: nothing retrieved" : "refused although evidence was retrieved");
+        if (r.evalCase().shouldAnswer() && !r.answered()) {
+            String outcome = r.clarified() ? "clarified" : "refused";
+            notes.add(r.sources().isEmpty() ? outcome + ": nothing retrieved"
+                    : outcome + " although evidence was retrieved");
         }
-        if (!r.evalCase().shouldAnswer() && !r.refused()) {
-            notes.add("answered although a refusal was expected");
+        if (r.evalCase().shouldRefuse() && !r.refused()) {
+            notes.add("expected a refusal but got " + r.outcome());
+        }
+        if (r.evalCase().shouldClarify() && !r.clarified()) {
+            notes.add("expected clarification but got " + r.outcome());
         }
         if (r.evalCase().shouldAnswer() && !r.hit5()) {
             notes.add("expected document not in top 5");
@@ -536,6 +559,14 @@ class CopilotEvaluationTest {
         boolean shouldAnswer() {
             return "ANSWER".equals(expectedBehavior);
         }
+
+        boolean shouldRefuse() {
+            return "REFUSE".equals(expectedBehavior);
+        }
+
+        boolean shouldClarify() {
+            return "CLARIFY".equals(expectedBehavior);
+        }
     }
 
     record SweepRow(double threshold, int hits, int answerable, int wrongRefusals, int correctRefusals,
@@ -545,8 +576,21 @@ class CopilotEvaluationTest {
     record Judgement(boolean supported, List<String> unsupportedClaims) {
     }
 
-    record CaseResult(EvalCase evalCase, List<RetrievedChunk> sources, String answer, boolean refused,
+    record CaseResult(EvalCase evalCase, List<RetrievedChunk> sources, String answer,
+                      EvaluationRunner.ResponseOutcome outcome,
                       List<Citation> citations, boolean citationsValid, Judgement judgement) {
+
+        boolean answered() {
+            return outcome == EvaluationRunner.ResponseOutcome.ANSWER;
+        }
+
+        boolean refused() {
+            return outcome == EvaluationRunner.ResponseOutcome.REFUSE;
+        }
+
+        boolean clarified() {
+            return outcome == EvaluationRunner.ResponseOutcome.CLARIFY;
+        }
 
         boolean hit5() {
             return containsDocument(sources, evalCase.expectedDocument());
