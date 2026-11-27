@@ -54,11 +54,12 @@ thresholds below.
 | Metric | Result |
 | --- | --- |
 | Copilot cases | 21 (13 expected answers, 7 expected refusals, 1 expected clarification) |
-| Retrieval Hit@1 / Hit@5 | 12/13 / 13/13 |
+| Retrieval Hit@1 / Hit@5 (tuned) | 12/13 / 13/13 |
 | Expected answers produced | 13/13 |
 | Correct refusals | 7/7 |
 | Correct clarifications | 1/1 |
 | Valid citations (answered cases) | 13/13 |
+| Expected document cited (answered, answerable cases) | 13/13 |
 | Grounded answers (Gemini judge, answered cases) | 13/13 |
 | EvaluationRunner retrieval hit rate (top 5) | 100% |
 | EvaluationRunner answer behavior correctness | 100% |
@@ -78,6 +79,7 @@ expected clarification. Treat the evaluation as passing when:
 - Hit@5 is at least 12/13 and `support-01` retrieves its expected FAQ document.
 - At least 12/13 expected-answer cases produce an answer, and `account-01`
   answers directly rather than clarifying.
+- Every answerable case cites its expected source document.
 - Correct refusals are 7/7 and correct clarifications are 1/1; these metrics
   have separate denominators and outcomes.
 - Citation validity is 100% among answered cases, and groundedness is at least
@@ -87,9 +89,10 @@ These thresholds preserve the historical retrieval/answer baseline while
 requiring the two identified case-level fixes and exact handling of
 refusal-versus-clarification expectations.
 
-The 27 Nov 2026 run met every threshold: Hit@5 13/13, expected answers 13/13
-(including direct answer for `account-01`), expected refusals 7/7, expected
-clarifications 1/1, citation validity 13/13, and groundedness 13/13.
+The final 27 Nov 2026 run met every threshold: Hit@5 13/13, expected answers
+13/13 (including direct answer for `account-01`), expected refusals 7/7,
+expected clarifications 1/1, expected-document citations 13/13, citation
+validity 13/13, and groundedness 13/13.
 
 `CopilotEvaluationTest` now exercises the real retrieval service, Gemini answer
 generation, and copilot orchestrator, then uses a Gemini judge for groundedness.

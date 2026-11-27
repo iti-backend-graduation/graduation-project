@@ -249,10 +249,11 @@ the current evaluation cases and separate outcome metrics:
 
 | Metric | Result |
 | --- | --- |
-| Hit@1 / Hit@5 (answerable) | 12/13 / 13/13 |
+| Hit@1 / Hit@5 (answerable, tuned) | 12/13 / 13/13 |
 | Answered when expected | 13/13 |
 | Correct refusals / clarifications | 7/7 / 1/1 |
 | Citation validity (answered) | 13/13 |
+| Expected source cited (answerable) | 13/13 |
 | Grounded answers (Gemini judge, answered) | 13/13 |
 | Clarifying-question probe (separate two-run evaluation) | 12/12 |
 

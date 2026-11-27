@@ -4,7 +4,7 @@
   {"id":"lost-01","category":"retrieval","question":"What should an employee do when a card is reported stolen?","expectedDocument":"02-lost-stolen-card-procedure.md","expectedPage":1,"expectedBehavior":"ANSWER"},
   {"id":"dispute-01","category":"retrieval","question":"What is the filing period for a card transaction dispute?","expectedDocument":"03-card-dispute-and-chargeback-procedure.md","expectedPage":2,"expectedBehavior":"ANSWER"},
   {"id":"atm-01","category":"retrieval","question":"What information is needed for a cash-not-dispensed claim?","expectedDocument":"04-atm-and-pos-troubleshooting.md","expectedPage":1,"expectedBehavior":"ANSWER"},
-  {"id":"digital-01","category":"retrieval","question":"How can a customer enable international usage?","expectedDocument":"05-digital-banking-user-guide.md","expectedPage":2,"expectedBehavior":"ANSWER"},
+  {"id":"digital-01","category":"retrieval","question":"How can a customer enable international usage?","expectedDocument":"01-card-services-handbook.md","expectedPage":2,"expectedBehavior":"ANSWER"},
   {"id":"security-01","category":"retrieval","question":"Can an employee ask for the customer's OTP?","expectedDocument":"06-digital-banking-security-and-authentication.md","expectedPage":1,"expectedBehavior":"ANSWER"},
   {"id":"support-01","category":"retrieval","question":"According to the BM Digital support FAQ, what is the Contact Center hotline number?","expectedDocument":"07-digital-banking-support-faq.md","expectedPage":1,"expectedBehavior":"ANSWER"},
   {"id":"transfer-01","category":"retrieval","question":"What details are required for an international transfer?","expectedDocument":"08-remittances-and-transfers-guide.md","expectedPage":2,"expectedBehavior":"ANSWER"},

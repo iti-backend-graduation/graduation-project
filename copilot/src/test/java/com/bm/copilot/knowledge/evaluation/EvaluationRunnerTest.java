@@ -101,6 +101,9 @@ class EvaluationRunnerTest {
         assertThat(cases).filteredOn(testCase -> testCase.id().equals("account-01"))
                 .extracting(DatasetCase::expectedDocument)
                 .containsExactly("11-required-documents-checklist.md");
+        assertThat(cases).filteredOn(testCase -> testCase.id().equals("digital-01"))
+                .extracting(DatasetCase::expectedDocument)
+                .containsExactly("01-card-services-handbook.md");
     }
 
     private record DatasetCase(
