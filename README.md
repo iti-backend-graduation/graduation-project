@@ -236,25 +236,28 @@ cd copilot
 
 Both runs need Docker and `GEMINI_API_KEY`, and call the real model. Embeddings are cached in `target/eval-embeddings.cache` to stay within the free-tier quota. Reports: [`copilot/eval/copilot-results.md`](copilot/eval/copilot-results.md) and [`copilot/eval/clarification-probe.md`](copilot/eval/clarification-probe.md).
 
-Latest measured results (21 cases, 252 chunks):
+Latest real Gemini-backed orchestrator run (21 cases; 27 Nov 2026):
 
 | Metric | Result |
 | --- | --- |
 | Hit@1 / Hit@5 (answerable) | 11/13 / 12/13 |
-| Wrong refusals of answerable questions | 0/13 |
-| Correct refusals | 6/8 |
-| Citation validity | 15/15 |
-| Grounded answers (LLM judge) | 15/15 |
-| Clarifying-question probe | 11/12 |
+| Answered when expected | 12/13 |
+| Expected non-answer cases returned no answer | 8/8 |
+| Citation validity (answered) | 12/12 |
+| Grounded answers (Gemini judge, answered) | 12/12 |
+| Clarifying-question probe (separate evaluation run) | 11/12 |
 
 ### Known limitations
 
 - The model can vary between runs even at temperature 0. The reports show each run, not a best case.
-- In the last full evaluation, two of the eight questions that should be refused were answered. One was an out-of-scope savings question, answered from the savings document. The other was Developer B's ambiguous case, measured before clarifying questions existed.
+- In the latest run, the account-opening question (`account-01`) received a clarifying question instead of a direct answer, so it is counted as a non-answer against its current `ANSWER` expectation. The ambiguous-limit case also received a clarification; expected non-answer metrics combine refusals and clarifications.
+- One answerable retrieval case (`support-01`) did not retrieve its expected document in the top five, although the generated answer was judged grounded in the returned evidence.
 - A question that is only partly ambiguous (for example a fee that differs by card type) may be answered or clarified.
 - Branch business-hours questions are refused, because the planted injection test line sits in the same chunk as the hours. The policy check then drops that evidence; this is safe but strict.
 - The Request Preparation Agent is a placeholder until the service-request module provides the real one.
 - The free Gemini tier limits embeddings to 1000 a day and 100 a minute. A full ingestion needs about 250, so uploading all 16 files back to back can hit the per-minute limit. That upload fails (HTTP 500, nothing is stored) and succeeds when retried a minute later.
+- The corpus has 15 Markdown sources (17,778 words, approximately 36 pages at 500 words/page) and one 1-page PDF. Markdown has no fixed physical page count; by this estimate the combined corpus is about 37 pages, below the 60–80-page target. See [`copilot/eval/report.md`](copilot/eval/report.md).
+- Request/approval endpoints are not implemented in the merged code yet, so the workflow evaluation cases still depend on Dev D's implementation.
 
 ## Acceptance Demo
 
