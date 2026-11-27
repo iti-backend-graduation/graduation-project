@@ -236,27 +236,40 @@ cd copilot
 
 Both runs need Docker and `GEMINI_API_KEY`, and call the real model. Embeddings are cached in `target/eval-embeddings.cache` to stay within the free-tier quota. Reports: [`copilot/eval/copilot-results.md`](copilot/eval/copilot-results.md) and [`copilot/eval/clarification-probe.md`](copilot/eval/clarification-probe.md).
 
-Latest real Gemini-backed orchestrator run (21 cases; 27 Nov 2026):
+To reproduce the corpus page count, run `python eval/render_markdown_corpus.py` from
+`copilot/`. The script renders all Markdown sources with headless Chrome/Chromium
+using US Letter paper, 13 pt Arial, 1.75 line spacing, 0.55-inch vertical and
+1.25-inch horizontal margins, and one source per starting page; it counts the
+resulting PDF pages and adds the physical pages in source PDFs. It prints the
+browser version and exits unsuccessfully if the total is outside 60–80 pages.
+The generated PDF is written to the ignored `copilot/target/` directory.
+
+Most recent real Gemini-backed orchestrator run (21 cases; 27 Nov 2026), before
+the current evaluation-case wording and outcome-category updates:
 
 | Metric | Result |
 | --- | --- |
 | Hit@1 / Hit@5 (answerable) | 11/13 / 12/13 |
 | Answered when expected | 12/13 |
-| Expected non-answer cases returned no answer | 8/8 |
+| Expected non-answer cases returned no answer (old combined metric) | 8/8 |
 | Citation validity (answered) | 12/12 |
 | Grounded answers (Gemini judge, answered) | 12/12 |
 | Clarifying-question probe (separate evaluation run) | 11/12 |
 
+These are historical baseline results, not a run of the revised dataset. The
+new metrics score `ANSWER`, `REFUSE`, and `CLARIFY` independently; regenerate the
+report with the documented command before treating them as current.
+
 ### Known limitations
 
 - The model can vary between runs even at temperature 0. The reports show each run, not a best case.
-- In the latest run, the account-opening question (`account-01`) received a clarifying question instead of a direct answer, so it is counted as a non-answer against its current `ANSWER` expectation. The ambiguous-limit case also received a clarification; expected non-answer metrics combine refusals and clarifications.
-- One answerable retrieval case (`support-01`) did not retrieve its expected document in the top five, although the generated answer was judged grounded in the returned evidence.
+- Refusals and clarifications are measured as distinct outcomes and are not combined into a non-answer correctness metric.
+- The revised account-opening/support questions and clarification expectation have not yet been rerun against Gemini; a local `GEMINI_API_KEY` and Docker are required for that real-model measurement.
 - A question that is only partly ambiguous (for example a fee that differs by card type) may be answered or clarified.
 - Branch business-hours questions are refused, because the planted injection test line sits in the same chunk as the hours. The policy check then drops that evidence; this is safe but strict.
 - The Request Preparation Agent is a placeholder until the service-request module provides the real one.
 - The free Gemini tier limits embeddings to 1000 a day and 100 a minute. A full ingestion needs about 250, so uploading all 16 files back to back can hit the per-minute limit. That upload fails (HTTP 500, nothing is stored) and succeeds when retried a minute later.
-- The corpus has 15 Markdown sources (17,778 words, approximately 36 pages at 500 words/page) and one 1-page PDF. Markdown has no fixed physical page count; by this estimate the combined corpus is about 37 pages, below the 60–80-page target. See [`copilot/eval/report.md`](copilot/eval/report.md).
+- The corpus has 15 Markdown sources and one PDF. Under the documented Chrome print layout, the Markdown renders to 75 physical pages and the source PDF is 1 page, for 76 physical pages total. See [`copilot/eval/report.md`](copilot/eval/report.md) and rerun the documented script after corpus changes.
 - Request/approval endpoints are not implemented in the merged code yet, so the workflow evaluation cases still depend on Dev D's implementation.
 
 ## Acceptance Demo
