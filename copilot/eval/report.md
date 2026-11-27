@@ -63,6 +63,7 @@ thresholds below.
 | EvaluationRunner retrieval hit rate (top 5) | 100% |
 | EvaluationRunner answer behavior correctness | 100% |
 | EvaluationRunner refusal correctness / clarification correctness | 100% / 100% |
+| Separate clarification probe (12 outcomes across 2 runs) | 12/12 |
 
 The run answered the targeted `account-01` question directly, retrieved and
 cited the expected FAQ for `support-01`, and returned a clarification for

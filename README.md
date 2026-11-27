@@ -254,7 +254,7 @@ the current evaluation cases and separate outcome metrics:
 | Correct refusals / clarifications | 7/7 / 1/1 |
 | Citation validity (answered) | 13/13 |
 | Grounded answers (Gemini judge, answered) | 13/13 |
-| Clarifying-question probe (separate evaluation run) | 11/12 |
+| Clarifying-question probe (separate two-run evaluation) | 12/12 |
 
 The run met the documented evaluation thresholds, including retrieving the
 expected support FAQ for `support-01` and directly answering the revised
