@@ -38,21 +38,32 @@ for clean nonblank text, size limits, and section metadata.
 
 ## Real retrieval and copilot metrics
 
-The real Gemini run shared for PR #50 measured the following before the
-evaluation was wired through the orchestrator. Scores vary between model runs.
+The latest real Gemini run (27 Nov 2026) exercised retrieval, generation,
+orchestration, and model-judged grounding. It used the real corpus and 21
+copilot cases; scores vary between model runs.
 
 | Metric | Result |
 | --- | --- |
 | Copilot cases | 21 (13 answerable, 8 expected refusals) |
 | Retrieval Hit@1 / Hit@5 | 11/13 / 12/13 |
-| Wrong refusals of answerable questions | 0/13 |
-| Correct refusals | 7/8 |
-| Valid citations | 14/14 |
-| Grounded answers (Gemini judge) | 13/14 |
+| Answered when expected | 12/13 |
+| Expected non-answer cases returned no answer | 8/8 |
+| Valid citations (answered cases) | 12/12 |
+| Grounded answers (Gemini judge, answered cases) | 12/12 |
+| EvaluationRunner retrieval hit rate (top 5) | 92% |
+| EvaluationRunner answer behavior correctness | 92% |
+
+`account-01` received a clarifying question instead of the direct answer its
+current dataset expectation requests; it is counted as a non-answer. The
+ambiguous-limit case also received a clarification, which is counted with
+expected refusals in this report. `support-01` missed its expected document in
+the top five, although the generated answer was judged grounded in the returned
+evidence. See the generated [`copilot-results.md`](copilot-results.md) for all
+per-case results.
 
 `CopilotEvaluationTest` now exercises the real retrieval service, Gemini answer
 generation, and copilot orchestrator, then uses a Gemini judge for groundedness.
-Run it to regenerate `copilot-results.md` with current metrics:
+Run it to regenerate `copilot-results.md` with new metrics:
 
 ```powershell
 cd copilot

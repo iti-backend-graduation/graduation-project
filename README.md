@@ -236,22 +236,22 @@ cd copilot
 
 Both runs need Docker and `GEMINI_API_KEY`, and call the real model. Embeddings are cached in `target/eval-embeddings.cache` to stay within the free-tier quota. Reports: [`copilot/eval/copilot-results.md`](copilot/eval/copilot-results.md) and [`copilot/eval/clarification-probe.md`](copilot/eval/clarification-probe.md).
 
-Most recently reported Gemini run (21 cases; before the evaluation was wired
-through the full orchestrator):
+Latest real Gemini-backed orchestrator run (21 cases; 27 Nov 2026):
 
 | Metric | Result |
 | --- | --- |
 | Hit@1 / Hit@5 (answerable) | 11/13 / 12/13 |
-| Wrong refusals of answerable questions | 0/13 |
-| Correct refusals | 7/8 |
-| Citation validity | 14/14 |
-| Grounded answers (LLM judge) | 13/14 |
-| Clarifying-question probe | 11/12 |
+| Answered when expected | 12/13 |
+| Expected non-answer cases returned no answer | 8/8 |
+| Citation validity (answered) | 12/12 |
+| Grounded answers (Gemini judge, answered) | 12/12 |
+| Clarifying-question probe (separate evaluation run) | 11/12 |
 
 ### Known limitations
 
 - The model can vary between runs even at temperature 0. The reports show each run, not a best case.
-- In the last full evaluation, two of the eight questions that should be refused were answered. One was an out-of-scope savings question, answered from the savings document. The other was Developer B's ambiguous case, measured before clarifying questions existed.
+- In the latest run, the account-opening question (`account-01`) received a clarifying question instead of a direct answer, so it is counted as a non-answer against its current `ANSWER` expectation. The ambiguous-limit case also received a clarification; expected non-answer metrics combine refusals and clarifications.
+- One answerable retrieval case (`support-01`) did not retrieve its expected document in the top five, although the generated answer was judged grounded in the returned evidence.
 - A question that is only partly ambiguous (for example a fee that differs by card type) may be answered or clarified.
 - Branch business-hours questions are refused, because the planted injection test line sits in the same chunk as the hours. The policy check then drops that evidence; this is safe but strict.
 - The Request Preparation Agent is a placeholder until the service-request module provides the real one.
