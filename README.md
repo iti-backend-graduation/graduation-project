@@ -169,6 +169,93 @@ The Gemini embedding model is `gemini-embedding-001`; document chunks use 768
 dimensions. Flyway migration V21 switches the existing vector schema and removes
 old provider embeddings, which cannot be reused after an embedding-model change.
 
+## Copilot: Retrieval, Answers and Agents
+
+Code: `copilot/src/main/java/com/bm/copilot/retrieval` and `.../copilot`. Demo requests: [`copilot/http/copilot.http`](copilot/http/copilot.http).
+
+### Hybrid retrieval
+
+1. **Semantic search:** the question is embedded and compared with every chunk by pgvector cosine distance (`<=>`). Hits below `copilot.retrieval.min-similarity` (0.5) are dropped.
+2. **Keyword search:** PostgreSQL full-text search (`tsvector`, English dictionary). The question's words are OR-ed, so a long natural question still matches, and `ts_rank` puts chunks with more and rarer matches first.
+3. **Ranking with Reciprocal Rank Fusion (RRF):** each search returns its top 20; every chunk scores `Σ 1 / (60 + rank)` over the lists it appears in, and the top 5 are kept. RRF uses ranks only, so the two very different score scales never need to be compared.
+
+Equal scores are ordered by file name and chunk index, so the same question always gets the same sources. All values are bound SQL parameters.
+
+### Grounded answers
+
+`POST /api/copilot/ask` (role `EMPLOYEE`; supervisors inherit it):
+
+```json
+{ "question": "How much is the replacement fee for a lost debit card?" }
+```
+
+```json
+{
+  "answer": "The replacement fee for a lost debit card is EGP 100.",
+  "citations": [{ "documentName": "02-lost-stolen-card-procedure.md", "page": null, "section": "5.2 Replacement Fee" }],
+  "refused": false,
+  "suggestServiceRequest": false,
+  "requestDraft": null,
+  "clarificationQuestion": null
+}
+```
+
+When the answer suggests a service request (for example "A customer lost their debit card. What should I do?"), `requestDraft` holds a prepared draft for the employee to complete. Nothing is submitted.
+
+- The model (Gemini, temperature 0, JSON output) sees only the retrieved sources, each wrapped in a numbered `<source>` tag, and must cite them by number.
+- **Refusal:** the copilot refuses without calling the model when nothing is retrieved. It also refuses when the model refuses, cites a source it was not given, cites nothing, or returns invalid JSON.
+- **Prompt injection:** source text is escaped so it cannot close its tag, and the system prompt treats source text as data, never instructions.
+- **Clarifying questions:** when the sources give different answers depending on a missing detail ("What is the card limit?"), the copilot returns `clarificationQuestion` instead of guessing. `answer` then holds the same question and there are no citations.
+- **Limits:** questions are 1–1000 characters (400 `VALIDATION_FAILED` otherwise). Each user can ask 10 questions per minute (429 `TOO_MANY_REQUESTS`).
+- **Token usage:** every model call is recorded in `ai_usage` and can be queried at `/api/admin/ai-usage`.
+
+### Agents
+
+`CopilotOrchestrator` runs typed agents, each with one job:
+
+| Agent | Can do | Cannot do |
+| --- | --- | --- |
+| Knowledge Retrieval Agent | search the knowledge base | call the model or change data |
+| Policy Check Agent | check the answer against its cited evidence | rewrite the answer |
+| Request Preparation Agent | return a request draft | submit, approve or execute a request |
+
+- **Flow:** retrieve → answer → policy check → request draft (only when the answer suggests one).
+- **Termination:** the run ends when an answer passes the policy check, the model refuses, or the model asks a clarifying question.
+- **Iteration limit:** at most 3 attempts; retries search wider (5 sources, then 10). After 3 failed checks the copilot refuses.
+- **Timeouts:** every step has a timeout (`copilot.orchestrator.step-timeout`, 30 s).
+- **Fallback:** any error or timeout falls back to plain retrieve-and-answer, which is still policy-checked.
+- **Logging:** the correlation ID is carried into every step's log lines.
+
+### Evaluation
+
+```powershell
+cd copilot
+.\mvnw test "-Dtest=CopilotEvaluationTest" "-Deval=true"
+.\mvnw test "-Dtest=ClarificationProbeTest" "-Deval=true"
+```
+
+Both runs need Docker and `GEMINI_API_KEY`, and call the real model. Embeddings are cached in `target/eval-embeddings.cache` to stay within the free-tier quota. Reports: [`copilot/eval/copilot-results.md`](copilot/eval/copilot-results.md) and [`copilot/eval/clarification-probe.md`](copilot/eval/clarification-probe.md).
+
+Latest measured results (21 cases, 252 chunks):
+
+| Metric | Result |
+| --- | --- |
+| Hit@1 / Hit@5 (answerable) | 11/13 / 12/13 |
+| Wrong refusals of answerable questions | 0/13 |
+| Correct refusals | 6/8 |
+| Citation validity | 15/15 |
+| Grounded answers (LLM judge) | 15/15 |
+| Clarifying-question probe | 11/12 |
+
+### Known limitations
+
+- The model can vary between runs even at temperature 0. The reports show each run, not a best case.
+- In the last full evaluation, two of the eight questions that should be refused were answered. One was an out-of-scope savings question, answered from the savings document. The other was Developer B's ambiguous case, measured before clarifying questions existed.
+- A question that is only partly ambiguous (for example a fee that differs by card type) may be answered or clarified.
+- Branch business-hours questions are refused, because the planted injection test line sits in the same chunk as the hours. The policy check then drops that evidence; this is safe but strict.
+- The Request Preparation Agent is a placeholder until the service-request module provides the real one.
+- The free Gemini tier limits embeddings to 1000 a day and 100 a minute. A full ingestion needs about 250, so uploading all 16 files back to back can hit the per-minute limit. That upload fails (HTTP 500, nothing is stored) and succeeds when retried a minute later.
+
 ## Acceptance Demo
 
 The completed project should demonstrate:
