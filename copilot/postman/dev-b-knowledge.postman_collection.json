@@ -1,13 +1,14 @@
 {
   "info": {
     "name": "Banque Misr Copilot - Complete API",
-    "description": "JWT, security, health, API documentation, and Gemini document-ingestion checks.",
+    "description": "JWT and role security, Markdown/PDF ingestion, cited and refused copilot answers, AI usage, health/readiness, and API documentation.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080" },
     { "key": "employeeToken", "value": "" },
     { "key": "supervisorToken", "value": "" },
+    { "key": "correlationId", "value": "" },
     { "key": "markdownFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\docs-src\\01-card-services-handbook.md" },
     { "key": "pdfFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\docs-src\\16-synthetic-fee-schedule.pdf" },
     { "key": "unsupportedFile", "value": "D:\\ITI-Graduation-Project\\graduation-project\\copilot\\postman\\unsupported.txt" }
@@ -138,6 +139,19 @@
             "pm.test('Employee document access returns 403', function () { pm.response.to.have.status(403); });",
             "pm.expect(pm.response.json().code).to.eql('FORBIDDEN');"
           ] } }]
+        },
+        {
+          "name": "Copilot requires authentication",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"question\": \"What is the daily ATM withdrawal limit for the Classic Debit card?\"\n}" },
+            "url": "{{baseUrl}}/api/copilot/ask"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Copilot without a token returns 401', function () { pm.response.to.have.status(401); });",
+            "pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED');"
+          ] } }]
         }
       ]
     },
@@ -226,6 +240,101 @@
       ]
     },
     {
+      "name": "Copilot answers",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{employeeToken}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "Answer with citations",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"question\": \"What is the daily ATM withdrawal limit for the Classic Debit card?\"\n}" },
+            "url": "{{baseUrl}}/api/copilot/ask"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Answerable question returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.answer).to.be.a('string').and.not.empty;",
+            "pm.expect(body.refused).to.eql(false);",
+            "pm.expect(body.citations).to.be.an('array').that.is.not.empty;",
+            "pm.collectionVariables.set('correlationId', pm.response.headers.get('X-Correlation-Id'));"
+          ] } }]
+        },
+        {
+          "name": "Refuse unsupported question",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"question\": \"What is the weather forecast for Cairo tomorrow?\"\n}" },
+            "url": "{{baseUrl}}/api/copilot/ask"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Unsupported question returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.refused).to.eql(true);",
+            "pm.expect(body.citations).to.be.an('array').that.is.empty;"
+          ] } }]
+        },
+        {
+          "name": "Ask a clarifying question for ambiguous card limit",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"question\": \"What is the card limit?\"\n}" },
+            "url": "{{baseUrl}}/api/copilot/ask"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Ambiguous question returns 200', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.expect(body.clarificationQuestion).to.be.a('string').and.not.empty;",
+            "pm.expect(body.citations).to.be.an('array').that.is.empty;"
+          ] } }]
+        },
+        {
+          "name": "Reject blank question",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"question\": \"\"\n}" },
+            "url": "{{baseUrl}}/api/copilot/ask"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Blank question returns 400', function () { pm.response.to.have.status(400); });",
+            "pm.expect(pm.response.json().code).to.eql('VALIDATION_FAILED');"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "AI usage",
+      "item": [
+        {
+          "name": "Employee cannot read AI usage",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{employeeToken}}" }],
+            "url": "{{baseUrl}}/api/admin/ai-usage"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Employee AI usage access returns 403', function () { pm.response.to.have.status(403); });",
+            "pm.expect(pm.response.json().code).to.eql('FORBIDDEN');"
+          ] } }]
+        },
+        {
+          "name": "Supervisor reads usage for the cited-answer request",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{supervisorToken}}" }],
+            "url": "{{baseUrl}}/api/admin/ai-usage?correlationId={{correlationId}}"
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Supervisor AI usage access returns 200', function () { pm.response.to.have.status(200); });",
+            "pm.expect(pm.response.json()).to.be.an('array').that.is.not.empty;"
+          ] } }]
+        }
+      ]
+    },
+    {
       "name": "Operations",
       "item": [
         {
@@ -233,6 +342,13 @@
           "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health" },
           "event": [{ "listen": "test", "script": { "exec": [
             "pm.test('Health is UP', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('UP'); });"
+          ] } }]
+        },
+        {
+          "name": "Readiness",
+          "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health/readiness" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Readiness is UP', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('UP'); });"
           ] } }]
         },
         {

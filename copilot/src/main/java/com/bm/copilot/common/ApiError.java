@@ -8,7 +8,7 @@ import java.util.List;
  * <p>
  * {@code code} is a stable machine-readable value (for example VALIDATION_FAILED)
  * that the frontend can switch on; {@code message} is for humans.
- * {@code correlationId} is filled in Week 2, when the tracing filter exists.
+ * {@code correlationId} is the ID of the failed request, so a user can quote it and we can find the logs.
  */
 public record ApiError(
         Instant timestamp,
@@ -23,11 +23,11 @@ public record ApiError(
     public record FieldViolation(String field, String message) {}
 
     public static ApiError of(int status, String code, String message, String path) {
-        return new ApiError(Instant.now(), status, code, message, path, null, List.of());
+        return new ApiError(Instant.now(), status, code, message, path, CorrelationId.current(), List.of());
     }
 
     public static ApiError of(int status, String code, String message, String path,
                               List<FieldViolation> violations) {
-        return new ApiError(Instant.now(), status, code, message, path, null, violations);
+        return new ApiError(Instant.now(), status, code, message, path, CorrelationId.current(), violations);
     }
 }
