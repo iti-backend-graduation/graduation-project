@@ -16,16 +16,36 @@ class EvaluationRunnerTest {
     void calculatesRetrievalGroundednessAndBehaviorMetrics() {
         List<EvaluationRunner.EvaluationCase> cases = List.of(
                 new EvaluationRunner.EvaluationCase("limit", "cards.md", "ANSWER"),
+                new EvaluationRunner.EvaluationCase("missed", "accounts.md", "ANSWER"),
                 new EvaluationRunner.EvaluationCase("unknown", null, "REFUSE"));
 
         EvaluationRunner.EvaluationReport report = new EvaluationRunner().evaluate(cases, question ->
-                question.equals("limit")
-                        ? new EvaluationRunner.EvaluationObservation("cards.md", true, true)
-                        : new EvaluationRunner.EvaluationObservation(null, false, false));
+                switch (question) {
+                    case "limit" -> new EvaluationRunner.EvaluationObservation(
+                            List.of("other.md", "cards.md"), true, true);
+                    case "missed" -> new EvaluationRunner.EvaluationObservation(
+                            List.of("cards.md"), false, false);
+                    default -> new EvaluationRunner.EvaluationObservation(List.of("accounts.md"), true, false);
+                });
 
         assertThat(report.retrievalHitRate()).isEqualTo(0.5);
-        assertThat(report.groundedness()).isEqualTo(1.0);
+        assertThat(report.groundedness()).isEqualTo(0.5);
+        assertThat(report.refusalCorrectness()).isEqualTo(0.0);
+        assertThat(report.answerBehaviorCorrectness()).isEqualTo(0.5);
+        assertThat(report.retrievalCases()).isEqualTo(2);
+    }
+
+    @Test
+    void emptyDatasetProducesZeroMetrics() {
+        EvaluationRunner.EvaluationReport report = new EvaluationRunner().evaluate(List.of(), question -> {
+            throw new AssertionError("The evaluator must not run for an empty dataset");
+        });
+
+        assertThat(report.cases()).isZero();
+        assertThat(report.retrievalHitRate()).isZero();
+        assertThat(report.groundedness()).isZero();
         assertThat(report.refusalCorrectness()).isEqualTo(1.0);
+        assertThat(report.answerBehaviorCorrectness()).isEqualTo(1.0);
     }
 
     @Test

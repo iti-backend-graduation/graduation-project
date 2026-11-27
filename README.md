@@ -236,15 +236,16 @@ cd copilot
 
 Both runs need Docker and `GEMINI_API_KEY`, and call the real model. Embeddings are cached in `target/eval-embeddings.cache` to stay within the free-tier quota. Reports: [`copilot/eval/copilot-results.md`](copilot/eval/copilot-results.md) and [`copilot/eval/clarification-probe.md`](copilot/eval/clarification-probe.md).
 
-Latest measured results (21 cases, 252 chunks):
+Most recently reported Gemini run (21 cases; before the evaluation was wired
+through the full orchestrator):
 
 | Metric | Result |
 | --- | --- |
 | Hit@1 / Hit@5 (answerable) | 11/13 / 12/13 |
 | Wrong refusals of answerable questions | 0/13 |
-| Correct refusals | 6/8 |
-| Citation validity | 15/15 |
-| Grounded answers (LLM judge) | 15/15 |
+| Correct refusals | 7/8 |
+| Citation validity | 14/14 |
+| Grounded answers (LLM judge) | 13/14 |
 | Clarifying-question probe | 11/12 |
 
 ### Known limitations
@@ -255,6 +256,8 @@ Latest measured results (21 cases, 252 chunks):
 - Branch business-hours questions are refused, because the planted injection test line sits in the same chunk as the hours. The policy check then drops that evidence; this is safe but strict.
 - The Request Preparation Agent is a placeholder until the service-request module provides the real one.
 - The free Gemini tier limits embeddings to 1000 a day and 100 a minute. A full ingestion needs about 250, so uploading all 16 files back to back can hit the per-minute limit. That upload fails (HTTP 500, nothing is stored) and succeeds when retried a minute later.
+- The corpus has 15 Markdown sources (17,778 words, approximately 36 pages at 500 words/page) and one 1-page PDF. Markdown has no fixed physical page count; by this estimate the combined corpus is about 37 pages, below the 60–80-page target. See [`copilot/eval/report.md`](copilot/eval/report.md).
+- Request/approval endpoints are not implemented in the merged code yet, so the workflow evaluation cases still depend on Dev D's implementation.
 
 ## Acceptance Demo
 

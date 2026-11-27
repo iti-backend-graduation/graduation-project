@@ -4,9 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.bm.copilot.TestcontainersConfiguration;
 import com.bm.copilot.audit.AiUsageService;
+import com.bm.copilot.copilot.agent.CopilotOrchestrator;
+import com.bm.copilot.copilot.agent.PolicyCheckAgent;
+import com.bm.copilot.copilot.agent.RequestDraft;
+import com.bm.copilot.copilot.agent.RequestPreparationAgent;
+import com.bm.copilot.copilot.agent.RetrievalAgent;
 import com.bm.copilot.knowledge.evaluation.EvaluationRunner;
 import com.bm.copilot.knowledge.pipeline.Embedder;
 import com.bm.copilot.knowledge.pipeline.SpringAiEmbedder;
+import com.bm.copilot.knowledge.policy.PolicyValidationAgent;
 import com.bm.copilot.knowledge.service.IngestionService;
 import com.bm.copilot.retrieval.ChunkSearchRepository;
 import com.bm.copilot.retrieval.Citation;
@@ -17,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -197,11 +204,19 @@ class CopilotEvaluationTest {
             throws InterruptedException {
         HybridRetrievalService retrieval = new HybridRetrievalService(searchRepository, cachedEmbedder, threshold);
         CopilotService copilot = new CopilotService(retrieval, chatClientBuilder, aiUsageService);
+        RequestPreparationAgent requestPreparation = input ->
+                new RequestDraft(null, input.question(), List.of("category", "customerReference"));
+        CopilotOrchestrator orchestrator = new CopilotOrchestrator(
+                new RetrievalAgent(retrieval),
+                new PolicyCheckAgent(new PolicyValidationAgent()),
+                requestPreparation,
+                copilot,
+                Duration.ofSeconds(30));
         ChatClient judge = chatClientBuilder.build();
         List<CaseResult> results = new ArrayList<>();
         for (EvalCase evalCase : cases) {
             List<RetrievedChunk> sources = retrieval.search(evalCase.question(), CopilotService.TOP_K);
-            AskResponse response = copilot.answer(evalCase.question(), sources);
+            AskResponse response = orchestrator.ask(evalCase.question());
             if (!sources.isEmpty()) {
                 Thread.sleep(PAUSE_BETWEEN_MODEL_CALLS_MS);
             }
@@ -249,16 +264,19 @@ class CopilotEvaluationTest {
         md.append("|---|---|---|\n");
         summaryRows(baseline, tuned, md);
 
-        md.append("\n## Developer B's EvaluationRunner (unchanged)\n\n");
+        md.append("\n## EvaluationRunner metrics (retrieval cases and model-judged grounding)\n\n");
         md.append("| Metric | Baseline | Tuned |\n|---|---|---|\n");
         EvaluationRunner.EvaluationReport baseB = runnerReport(baseline);
         EvaluationRunner.EvaluationReport tunedB = runnerReport(tuned);
-        md.append("| retrievalHitRate (top-1 document, all cases) | ").append(pct(baseB.retrievalHitRate()))
+        md.append("| retrievalHitRate (expected document in top 5; answerable cases only) | ").append(pct(baseB.retrievalHitRate()))
                 .append(" | ").append(pct(tunedB.retrievalHitRate())).append(" |\n");
-        md.append("| groundedness (= citation validity) | ").append(pct(baseB.groundedness()))
+        md.append("| groundedness (Gemini judge, answered cases) | ").append(pct(baseB.groundedness()))
                 .append(" | ").append(pct(tunedB.groundedness())).append(" |\n");
         md.append("| refusalCorrectness | ").append(pct(baseB.refusalCorrectness()))
                 .append(" | ").append(pct(tunedB.refusalCorrectness())).append(" |\n");
+        md.append("| answerBehaviorCorrectness (answers returned for answerable cases) | ")
+                .append(pct(baseB.answerBehaviorCorrectness()))
+                .append(" | ").append(pct(tunedB.answerBehaviorCorrectness())).append(" |\n");
 
         md.append("\n## Threshold sweep (retrieval only, no model calls)\n\n");
         md.append("An empty retrieval means the copilot refuses before calling the model.\n\n");
@@ -304,11 +322,8 @@ class CopilotEvaluationTest {
         md.append("- 21 cases is a small sample; the threshold is a reasonable setting for this corpus, not a proven optimum.\n");
         md.append("- Groundedness is judged by the same model family (Gemini); it is a second opinion, not ground truth. ")
                 .append("Read the answers above to confirm.\n");
-        md.append("- `EvaluationRunner.retrievalHitRate` compares one document and divides by all cases, including ")
-                .append("cases that expect a refusal, so it understates retrieval quality. Hit@5 above uses answerable cases only.\n");
-        md.append("- `EvaluationRunner.groundedness` only reflects the `citationsGrounded` flag it is given; here that flag is ")
-                .append("citation validity, so it does not check the answer content.\n");
-        md.append("- `EvaluationRunner.refusalCorrectness` ignores wrong refusals of answerable questions; they are reported separately.\n");
+        md.append("- EvaluationRunner retrieval hit rate is expected-document-in-top-5 over cases with an expected document; ")
+                .append("answerable-case correctness and expected-refusal correctness have separate denominators.\n");
         md.append("- Markdown documents have no page numbers, so they are cited by section; the expected page in `cases.json` ")
                 .append("is not checked.\n");
         md.append("- 10 cases in `eval/cases.json` (workflow, authorization, duplicate execution, agent failure, incomplete ")
@@ -355,8 +370,12 @@ class CopilotEvaluationTest {
                 .toList();
         return new EvaluationRunner().evaluate(cases, question -> {
             CaseResult r = byQuestion.get(question);
-            String topDocument = r.sources().isEmpty() ? null : r.sources().get(0).citation().documentName();
-            return new EvaluationRunner.EvaluationObservation(topDocument, !r.refused(), r.citationsValid());
+            List<String> documents = r.sources().stream()
+                    .map(source -> source.citation().documentName())
+                    .distinct()
+                    .toList();
+            return new EvaluationRunner.EvaluationObservation(
+                    documents, !r.refused(), r.judgement() != null && r.judgement().supported());
         });
     }
 

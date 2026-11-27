@@ -15,13 +15,21 @@ import com.bm.copilot.copilot.CopilotService;
 import com.bm.copilot.knowledge.policy.ValidationResult;
 import com.bm.copilot.retrieval.Citation;
 import com.bm.copilot.retrieval.RetrievedChunk;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.MDC;
 
@@ -145,6 +153,41 @@ class CopilotOrchestratorTest {
         assertThat(response.refused()).isTrue();
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("agentFailureCases")
+    void evaluationDatasetAgentFailureCasesUseTheDocumentedFallback(AgentFailureCase evaluationCase) {
+        assertThat(evaluationCase.expectedBehavior()).isEqualTo("FALLBACK_ANSWER");
+        when(copilotService.retrieve(anyString())).thenReturn(List.of(FEE_CHUNK));
+        when(copilotService.answer(anyString(), anyList())).thenReturn(FEE_ANSWER);
+
+        if (evaluationCase.id().equals("agent-failure-01")) {
+            when(retrievalAgent.run(any())).thenThrow(new IllegalStateException("retrieval unavailable"));
+            when(policyCheckAgent.run(any())).thenReturn(supported());
+        } else {
+            when(retrievalAgent.run(any())).thenReturn(List.of(FEE_CHUNK));
+            AtomicInteger policyCalls = new AtomicInteger();
+            when(policyCheckAgent.run(any())).thenAnswer(invocation -> {
+                if (policyCalls.incrementAndGet() == 1) {
+                    Thread.sleep(1_000);
+                    return unsupported();
+                }
+                return supported();
+            });
+        }
+
+        AskResponse response = orchestrator.ask(evaluationCase.question());
+
+        assertThat(response).isEqualTo(FEE_ANSWER);
+        verify(copilotService).retrieve(evaluationCase.question());
+    }
+
+    static Stream<AgentFailureCase> agentFailureCases() throws Exception {
+        List<AgentFailureCase> cases = new ObjectMapper().readValue(
+                Files.readString(Path.of("eval/cases.json"), StandardCharsets.UTF_8),
+                new TypeReference<>() {});
+        return cases.stream().filter(evaluationCase -> "agent-failure".equals(evaluationCase.category()));
+    }
+
     @Test
     void attachesARequestDraftOnlyWhenTheAnswerSuggestsARequest() {
         AskResponse suggestsRequest = new AskResponse("Raise a card replacement request.", List.of(FEES), false, true, null, null);
@@ -182,5 +225,18 @@ class CopilotOrchestratorTest {
 
     private static ValidationResult unsupported() {
         return new ValidationResult(false, List.of(), List.of("The draft contains claims not supported by the retrieved evidence"));
+    }
+
+    private record AgentFailureCase(
+            String id,
+            String category,
+            String question,
+            String expectedDocument,
+            Integer expectedPage,
+            String expectedBehavior) {
+        @Override
+        public String toString() {
+            return id;
+        }
     }
 }
