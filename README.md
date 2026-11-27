@@ -244,27 +244,28 @@ resulting PDF pages and adds the physical pages in source PDFs. It prints the
 browser version and exits unsuccessfully if the total is outside 60–80 pages.
 The generated PDF is written to the ignored `copilot/target/` directory.
 
-Most recent real Gemini-backed orchestrator run (21 cases; 27 Nov 2026), before
-the current evaluation-case wording and outcome-category updates:
+Most recent real Gemini-backed orchestrator run (21 cases; 27 Nov 2026), using
+the current evaluation cases and separate outcome metrics:
 
 | Metric | Result |
 | --- | --- |
-| Hit@1 / Hit@5 (answerable) | 11/13 / 12/13 |
-| Answered when expected | 12/13 |
-| Expected non-answer cases returned no answer (old combined metric) | 8/8 |
-| Citation validity (answered) | 12/12 |
-| Grounded answers (Gemini judge, answered) | 12/12 |
+| Hit@1 / Hit@5 (answerable) | 12/13 / 13/13 |
+| Answered when expected | 13/13 |
+| Correct refusals / clarifications | 7/7 / 1/1 |
+| Citation validity (answered) | 13/13 |
+| Grounded answers (Gemini judge, answered) | 13/13 |
 | Clarifying-question probe (separate evaluation run) | 11/12 |
 
-These are historical baseline results, not a run of the revised dataset. The
-new metrics score `ANSWER`, `REFUSE`, and `CLARIFY` independently; regenerate the
-report with the documented command before treating them as current.
+The run met the documented evaluation thresholds, including retrieving the
+expected support FAQ for `support-01` and directly answering the revised
+account-opening question. Full per-case results are in
+[`copilot/eval/copilot-results.md`](copilot/eval/copilot-results.md). The real
+Gemini evaluation requires Docker and a locally configured `GEMINI_API_KEY`.
 
 ### Known limitations
 
 - The model can vary between runs even at temperature 0. The reports show each run, not a best case.
 - Refusals and clarifications are measured as distinct outcomes and are not combined into a non-answer correctness metric.
-- The revised account-opening/support questions and clarification expectation have not yet been rerun against Gemini; a local `GEMINI_API_KEY` and Docker are required for that real-model measurement.
 - A question that is only partly ambiguous (for example a fee that differs by card type) may be answered or clarified.
 - Branch business-hours questions are refused, because the planted injection test line sits in the same chunk as the hours. The policy check then drops that evidence; this is safe but strict.
 - The Request Preparation Agent is a placeholder until the service-request module provides the real one.
