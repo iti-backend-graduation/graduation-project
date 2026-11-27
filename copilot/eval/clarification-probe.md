@@ -5,17 +5,17 @@ Expected: ambiguous questions ask for the missing detail; clear questions are an
 
 | Question | Kind | Run | Outcome | Response |
 |---|---|---|---|---|
-| What is the card limit? | ambiguous | 1 | ASKED | Which card type or limit (credit limit, daily ATM limit, or daily POS limit) are you inquiring about? |
-| What is the interest rate? | ambiguous | 1 | ASKED | Which product's interest rate would you like to know? |
+| What is the card limit? | ambiguous | 1 | ASKED | Which card type are you inquiring about? |
+| What is the interest rate? | ambiguous | 1 | ASKED | Which savings product are you asking about? |
 | What documents does the customer need? | ambiguous | 1 | ASKED | What product or service is the customer applying for? |
-| How much is the card replacement fee? | clear | 1 | ASKED (unexpected) | Is the card a debit card or a credit card? |
+| What are the debit and credit card replacement fees? | clear | 1 | ANSWERED | The replacement fee is EGP 100 for a debit card and EGP 150 for a credit card. |
 | How many wrong PIN attempts block a card? | clear | 1 | ANSWERED | Three consecutive wrong PIN attempts block the card. |
 | How many days does a customer have to file a card dispute? | clear | 1 | ANSWERED | The customer must file the dispute within 60 days of the statement date on which the transaction appears. |
-| What is the card limit? | ambiguous | 2 | ASKED | Which card type or limit are you inquiring about? |
+| What is the card limit? | ambiguous | 2 | ASKED | Which card type or limit (credit limit, daily ATM limit, or daily POS limit) are you inquiring about? |
 | What is the interest rate? | ambiguous | 2 | ASKED | Which product's interest rate would you like to know? |
-| What documents does the customer need? | ambiguous | 2 | ASKED | Which product or service (new account, debit card, or credit card) is the customer applying for? |
-| How much is the card replacement fee? | clear | 2 | ANSWERED | The replacement fee is EGP 100 for a debit card and EGP 150 for a credit card. |
-| How many wrong PIN attempts block a card? | clear | 2 | ANSWERED | Three consecutive wrong PIN attempts block a card. |
+| What documents does the customer need? | ambiguous | 2 | ASKED | What product or service is the customer applying for? |
+| What are the debit and credit card replacement fees? | clear | 2 | ANSWERED | The replacement fee is EGP 100 for a debit card and EGP 150 for a credit card. |
+| How many wrong PIN attempts block a card? | clear | 2 | ANSWERED | Three consecutive wrong PIN attempts block the card. |
 | How many days does a customer have to file a card dispute? | clear | 2 | ANSWERED | The customer must file the dispute within 60 days of the statement date on which the transaction appears. |
 
-As expected: 11/12
+As expected: 12/12

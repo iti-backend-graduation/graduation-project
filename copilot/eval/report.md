@@ -46,28 +46,30 @@ for clean nonblank text, size limits, and section metadata.
 
 ## Real retrieval and copilot metrics
 
-The most recent real Gemini run (27 Nov 2026) predates the current changes to
-`support-01`, `account-01`, and the `ambiguous-01` expected outcome. It exercised
-retrieval, generation, orchestration, and model-judged grounding across 21 cases.
-Those scores are historical and are not evidence for the revised case wording.
+The latest real Gemini run (27 Nov 2026) exercised retrieval, generation,
+orchestration, and model-judged grounding across the revised 21-case copilot
+evaluation set. The test completed successfully and met the acceptance
+thresholds below.
 
 | Metric | Result |
 | --- | --- |
 | Copilot cases | 21 (13 expected answers, 7 expected refusals, 1 expected clarification) |
-| Retrieval Hit@1 / Hit@5 | 11/13 / 12/13 |
-| Answered when expected | 12/13 |
-| Old combined expected-non-answer metric | 8/8 (included one clarification) |
-| Valid citations (answered cases) | 12/12 |
-| Grounded answers (Gemini judge, answered cases) | 12/12 |
-| EvaluationRunner retrieval hit rate (top 5) | 92% |
-| EvaluationRunner answer behavior correctness | 92% |
+| Retrieval Hit@1 / Hit@5 (tuned) | 12/13 / 13/13 |
+| Expected answers produced | 13/13 |
+| Correct refusals | 7/7 |
+| Correct clarifications | 1/1 |
+| Valid citations (answered cases) | 13/13 |
+| Expected document cited (answered, answerable cases) | 13/13 |
+| Grounded answers (Gemini judge, answered cases) | 13/13 |
+| EvaluationRunner retrieval hit rate (top 5) | 100% |
+| EvaluationRunner answer behavior correctness | 100% |
+| EvaluationRunner refusal correctness / clarification correctness | 100% / 100% |
+| Separate clarification probe (12 outcomes across 2 runs) | 12/12 |
 
-The historical run clarified `account-01` under its old broad question and
-missed the expected document for `support-01`. The revised questions target the
-account type and support FAQ directly, and `ambiguous-01` now expects
-`CLARIFY`. A fresh real-model run is required to establish whether these changes
-resolve those misses. `copilot-results.md` contains the generated historical
-run; it must be regenerated to report current outcomes.
+The run answered the targeted `account-01` question directly, retrieved and
+cited the expected FAQ for `support-01`, and returned a clarification for
+`ambiguous-01`. The generated [`copilot-results.md`](copilot-results.md)
+contains the full case-by-case outcomes, answers, and threshold sweep.
 
 ### Acceptance thresholds for the revised copilot evaluation
 
@@ -77,6 +79,7 @@ expected clarification. Treat the evaluation as passing when:
 - Hit@5 is at least 12/13 and `support-01` retrieves its expected FAQ document.
 - At least 12/13 expected-answer cases produce an answer, and `account-01`
   answers directly rather than clarifying.
+- Every answerable case cites its expected source document.
 - Correct refusals are 7/7 and correct clarifications are 1/1; these metrics
   have separate denominators and outcomes.
 - Citation validity is 100% among answered cases, and groundedness is at least
@@ -85,6 +88,11 @@ expected clarification. Treat the evaluation as passing when:
 These thresholds preserve the historical retrieval/answer baseline while
 requiring the two identified case-level fixes and exact handling of
 refusal-versus-clarification expectations.
+
+The final 27 Nov 2026 run met every threshold: Hit@5 13/13, expected answers
+13/13 (including direct answer for `account-01`), expected refusals 7/7,
+expected clarifications 1/1, expected-document citations 13/13, citation
+validity 13/13, and groundedness 13/13.
 
 `CopilotEvaluationTest` now exercises the real retrieval service, Gemini answer
 generation, and copilot orchestrator, then uses a Gemini judge for groundedness.
@@ -115,8 +123,9 @@ count as a correct refusal.
 - Markdown has no physical PDF page number; it is cited by section.
 - The 60–80 page target is met under the documented print layout; Markdown has
   no intrinsic physical page numbers and continues to be cited by section.
-- The revised real-model results have not been measured yet. The evaluation
-  requires Docker and a locally configured `GEMINI_API_KEY`.
+- The real-model result is a single 21-case run and can vary between model runs;
+  it is evidence for this test run, not a guarantee of identical future output.
+- The evaluation requires Docker and a locally configured `GEMINI_API_KEY`.
 - `eval/cases.json` has 10 request/workflow/authorization/agent scenarios that
   are not copilot question-answer cases. The two agent-failure cases are now
   tied to executable orchestrator fallback tests.

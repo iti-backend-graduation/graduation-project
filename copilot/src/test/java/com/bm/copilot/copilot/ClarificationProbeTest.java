@@ -38,7 +38,7 @@ class ClarificationProbeTest {
             new Probe("What is the card limit?", true),
             new Probe("What is the interest rate?", true),
             new Probe("What documents does the customer need?", true),
-            new Probe("How much is the card replacement fee?", false),
+            new Probe("What are the debit and credit card replacement fees?", false),
             new Probe("How many wrong PIN attempts block a card?", false),
             new Probe("How many days does a customer have to file a card dispute?", false));
 
