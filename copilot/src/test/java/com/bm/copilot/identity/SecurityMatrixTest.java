@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.bm.copilot.TestcontainersConfiguration;
 import com.bm.copilot.copilot.AskResponse;
@@ -14,6 +15,7 @@ import com.jayway.jsonpath.JsonPath;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +66,11 @@ class SecurityMatrixTest {
             // any logged-in user
             new Row("GET", "/api/auth/me", D, A, A),
             new Row("POST", "/api/copilot/ask", D, A, A),
+            new Row("POST", "/api/requests", D, A, A),
+            new Row("GET", "/api/requests/mine", D, A, A),
+            new Row("GET", "/api/requests/{id}", D, A, A),
+            new Row("PUT", "/api/requests/{id}", D, A, A),
+            new Row("POST", "/api/requests/{id}/submit", D, A, A),
             // supervisor only
             new Row("GET", "/api/admin/ai-usage", D, D, A),
             new Row("GET", "/api/admin/documents", D, D, A),
@@ -152,7 +159,18 @@ class SecurityMatrixTest {
             // an unsupported file type: the ingestion refuses it with 400 before doing any work
             case "POST /api/admin/documents" -> multipart("/api/admin/documents")
                     .file(new MockMultipartFile("file", "matrix.exe", "application/octet-stream", "x".getBytes()));
-            default -> get(key.substring(key.indexOf(' ') + 1));
+            default -> genericRequest(key);
+        };
+    }
+
+    /** GET, or POST/PUT with an empty JSON body; "{id}" becomes a random id (so "allowed" usually means 404 or 400). */
+    private static AbstractMockHttpServletRequestBuilder<?> genericRequest(String key) {
+        String method = key.substring(0, key.indexOf(' '));
+        String path = key.substring(key.indexOf(' ') + 1).replace("{id}", UUID.randomUUID().toString());
+        return switch (method) {
+            case "POST" -> post(path).contentType(MediaType.APPLICATION_JSON).content("{}");
+            case "PUT" -> put(path).contentType(MediaType.APPLICATION_JSON).content("{}");
+            default -> get(path);
         };
     }
 
