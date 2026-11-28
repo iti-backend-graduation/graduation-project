@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -12,6 +13,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.HttpHeaders;
@@ -41,6 +43,27 @@ public class GlobalExceptionHandler {
         ApiError body = ApiError.of(HttpStatus.BAD_REQUEST.value(), "VALIDATION_FAILED",
                 "Request validation failed", request.getRequestURI(), violations);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(ValidationFailedException.class)
+    ResponseEntity<ApiError> handleRuleViolation(ValidationFailedException ex, HttpServletRequest request) {
+        ApiError body = ApiError.of(HttpStatus.BAD_REQUEST.value(), "VALIDATION_FAILED",
+                ex.getMessage(), request.getRequestURI(), ex.violations());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /** Two requests changed the same record at the same time (@Version): the second one loses. */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ResponseEntity<ApiError> handleOptimisticLock(OptimisticLockingFailureException ex, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "CONFLICT",
+                "The record was changed by another request. Reload it and try again", request);
+    }
+
+    /** A path or query value of the wrong type, such as /api/requests/not-a-uuid. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER",
+                "Invalid value for parameter '" + ex.getName() + "'", request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
