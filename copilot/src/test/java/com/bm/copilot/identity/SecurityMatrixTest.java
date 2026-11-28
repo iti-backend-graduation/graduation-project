@@ -74,7 +74,12 @@ class SecurityMatrixTest {
             // supervisor only
             new Row("GET", "/api/admin/ai-usage", D, D, A),
             new Row("GET", "/api/admin/documents", D, D, A),
-            new Row("POST", "/api/admin/documents", D, D, A));
+            new Row("POST", "/api/admin/documents", D, D, A),
+            new Row("GET", "/api/approvals/queue", D, D, A),
+            new Row("POST", "/api/approvals/{id}/approve", D, D, A),
+            new Row("POST", "/api/approvals/{id}/reject", D, D, A),
+            new Row("POST", "/api/approvals/{id}/edit-and-approve", D, D, A),
+            new Row("POST", "/api/approvals/{id}/execute", D, D, A));
 
     @Autowired
     MockMvc mockMvc;

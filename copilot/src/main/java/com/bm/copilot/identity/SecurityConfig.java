@@ -33,6 +33,9 @@ class SecurityConfig {
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // Checked before the request body is read, so an employee always gets 403 here, never 400.
+                        // The controller's @PreAuthorize stays as a second layer.
+                        .requestMatchers("/api/approvals/**").hasRole("SUPERVISOR")
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(errors)
