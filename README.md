@@ -269,10 +269,46 @@ Gemini evaluation requires Docker and a locally configured `GEMINI_API_KEY`.
 - Refusals and clarifications are measured as distinct outcomes and are not combined into a non-answer correctness metric.
 - A question that is only partly ambiguous (for example a fee that differs by card type) may be answered or clarified.
 - Branch business-hours questions are refused, because the planted injection test line sits in the same chunk as the hours. The policy check then drops that evidence; this is safe but strict.
-- The Request Preparation Agent is a placeholder until the service-request module provides the real one.
 - The free Gemini tier limits embeddings to 1000 a day and 100 a minute. A full ingestion needs about 250, so uploading all 16 files back to back can hit the per-minute limit. That upload fails (HTTP 500, nothing is stored) and succeeds when retried a minute later.
 - The corpus has 15 Markdown sources and one PDF. Under the documented Chrome print layout, the Markdown renders to 75 physical pages and the source PDF is 1 page, for 76 physical pages total. See [`copilot/eval/report.md`](copilot/eval/report.md) and rerun the documented script after corpus changes.
-- Request/approval endpoints are not implemented in the merged code yet, so the workflow evaluation cases still depend on Dev D's implementation.
+
+## Service Requests and Approvals
+
+Code: `copilot/src/main/java/com/bm/copilot/servicerequest` and `.../approval`. Demo requests: [`copilot/http/workflow.http`](copilot/http/workflow.http).
+
+### Lifecycle
+
+```text
+DRAFT -> PENDING_APPROVAL -> APPROVED -> EXECUTED
+                          \-> REJECTED
+```
+
+The moves are methods on the `ServiceRequest` entity (`submit`, `approve`, `editAndApprove`, `reject`, `markExecuted`). Each one throws when the current status does not allow it, which the API returns as 409 `CONFLICT`. Every field change and status move is stored in `service_request_changes` (who, when, field, old value, new value).
+
+### Endpoints
+
+| Endpoint | Who | Rule |
+| --- | --- | --- |
+| `POST /api/requests` | employee | creates a `DRAFT` owned by the caller |
+| `PUT /api/requests/{id}` | owner | only while `DRAFT` |
+| `POST /api/requests/{id}/submit` | owner | the request must be complete; moves to `PENDING_APPROVAL` |
+| `GET /api/requests/mine` | employee | the caller's own requests |
+| `GET /api/requests/{id}` | owner or supervisor | details and full history |
+| `GET /api/approvals/queue` | supervisor | every `PENDING_APPROVAL` request |
+| `POST /api/approvals/{id}/approve` | supervisor | |
+| `POST /api/approvals/{id}/reject` | supervisor | `{"reason": "..."}` is required |
+| `POST /api/approvals/{id}/edit-and-approve` | supervisor | only the changed fields; at least one must change |
+| `POST /api/approvals/{id}/execute` | supervisor | simulated; only `APPROVED`, only once |
+
+- **Validation:** `category` and `description` are required. A `CARD_SERVICE` request needs `cardLastFour` (4 digits), and other categories must not carry one. `customerReference` is required before submit. Errors are 400 `VALIDATION_FAILED` with the shared `ApiError`.
+- **Ownership:** another employee's request is 404, not 403, so nobody can learn it exists.
+- **Supervisor-only:** `/api/approvals/**` is checked by a URL rule before the body is read, and again by `@PreAuthorize`. An employee always gets 403.
+- **Four-eyes rule:** a supervisor cannot decide on a request they created (403).
+- **Duplicate execution** is stopped three times: the state check (`EXECUTED` cannot execute again), `@Version` optimistic locking (of two simultaneous calls, one gets 409), and a unique `execution_outcomes.request_id`.
+- **Audit:** create, update, submit, every decision and every execution are written to `audit_events` with the correlation ID. Decisions are also kept in `approval_decisions`, and outcomes in `execution_outcomes`.
+- **Request Preparation Agent:** when the copilot suggests a service request, the agent returns a typed `RequestDraft` (category, description with the cited procedures, missing fields). It has no dependencies, so it cannot submit, approve or execute anything. The employee creates the real draft through `POST /api/requests`, so the same validation and ownership rules apply.
+
+Migrations: V40 (requests and history) and V41 (decisions and outcomes).
 
 ## Acceptance Demo
 

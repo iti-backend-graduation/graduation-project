@@ -1,0 +1,105 @@
+### Service request and approval demo (acceptance steps 3-7). Start the application first (see README),
+### then run the requests in order. Uses the demo users seeded by DemoUserSeeder. No AI calls.
+
+### 1. Login as employee
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{"username": "employee1", "password": "Employee#123"}
+
+> {% client.global.set("employeeToken", response.body.accessToken); %}
+
+### 2. Login as supervisor
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{"username": "supervisor1", "password": "Supervisor#123"}
+
+> {% client.global.set("supervisorToken", response.body.accessToken); %}
+
+### 3. Employee creates a draft -> 201, status DRAFT
+POST http://localhost:8080/api/requests
+Authorization: Bearer {{employeeToken}}
+Content-Type: application/json
+
+{
+  "category": "CARD_SERVICE",
+  "customerReference": "CUST-1001",
+  "cardLastFour": "4821",
+  "description": "Customer lost their debit card; block it and issue a replacement."
+}
+
+> {% client.global.set("requestId", response.body.id); %}
+
+### 4. Invalid draft -> 400 VALIDATION_FAILED (a card request needs the card's last 4 digits)
+POST http://localhost:8080/api/requests
+Authorization: Bearer {{employeeToken}}
+Content-Type: application/json
+
+{"category": "CARD_SERVICE", "description": "Replace card"}
+
+### 5. Employee edits the draft (only while DRAFT) -> 200
+PUT http://localhost:8080/api/requests/{{requestId}}
+Authorization: Bearer {{employeeToken}}
+Content-Type: application/json
+
+{
+  "category": "CARD_SERVICE",
+  "customerReference": "CUST-1001",
+  "cardLastFour": "4821",
+  "description": "Customer lost their debit card at an ATM; block it and issue a replacement."
+}
+
+### 6. Employee submits -> 200, status PENDING_APPROVAL
+POST http://localhost:8080/api/requests/{{requestId}}/submit
+Authorization: Bearer {{employeeToken}}
+
+### 7. Employee tries to approve through the API -> 403 FORBIDDEN
+POST http://localhost:8080/api/approvals/{{requestId}}/approve
+Authorization: Bearer {{employeeToken}}
+
+### 8. Employee lists their own requests
+GET http://localhost:8080/api/requests/mine
+Authorization: Bearer {{employeeToken}}
+
+### 9. Supervisor sees the approval queue
+GET http://localhost:8080/api/approvals/queue
+Authorization: Bearer {{supervisorToken}}
+
+### 10. Executing before approval -> 409 CONFLICT
+POST http://localhost:8080/api/approvals/{{requestId}}/execute
+Authorization: Bearer {{supervisorToken}}
+
+### 11a. Supervisor approves -> 200, decision APPROVED
+POST http://localhost:8080/api/approvals/{{requestId}}/approve
+Authorization: Bearer {{supervisorToken}}
+
+### 11b. ...or rejects with a reason (instead of 11a, on a fresh pending request)
+POST http://localhost:8080/api/approvals/{{requestId}}/reject
+Authorization: Bearer {{supervisorToken}}
+Content-Type: application/json
+
+{"reason": "Customer reference does not match the ID shown"}
+
+### 11c. ...or edits and approves (instead of 11a, on a fresh pending request)
+POST http://localhost:8080/api/approvals/{{requestId}}/edit-and-approve
+Authorization: Bearer {{supervisorToken}}
+Content-Type: application/json
+
+{"customerReference": "CUST-2002"}
+
+### 12. Supervisor runs the simulated execution -> 200, status EXECUTED
+POST http://localhost:8080/api/approvals/{{requestId}}/execute
+Authorization: Bearer {{supervisorToken}}
+
+### 13. Executing again -> 409 CONFLICT (no duplicate execution)
+POST http://localhost:8080/api/approvals/{{requestId}}/execute
+Authorization: Bearer {{supervisorToken}}
+
+### 14. The request with its full history (every field change and status move)
+GET http://localhost:8080/api/requests/{{requestId}}
+Authorization: Bearer {{employeeToken}}
+
+### 15. The audit trail of this request's decision and execution is in audit_events (SQL):
+###     SELECT action, actor_id, details, correlation_id, created_at FROM audit_events
+###     WHERE entity_type = 'SERVICE_REQUEST' ORDER BY created_at;
