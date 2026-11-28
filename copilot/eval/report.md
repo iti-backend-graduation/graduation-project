@@ -129,8 +129,15 @@ count as a correct refusal.
 - `eval/cases.json` has 10 request/workflow/authorization/agent scenarios that
   are not copilot question-answer cases. The two agent-failure cases are now
   tied to executable orchestrator fallback tests.
-- No request or approval API/service implementation is present in the merged
-  repository yet (those modules contain package descriptors only), so the
-  workflow, authorization, duplicate-execution, rejected-request, and
-  edit-and-approve scenarios cannot be wired to Dev D behavior until that code
-  is merged. Those cases remain unverified, not passed.
+- The request and approval scenarios are verified by Dev D's automated tests,
+  not by the copilot evaluation runner:
+  `unauthorized-approve-01` and `unauthorized-execute-01` by
+  `ApprovalWorkflowIntegrationTest.anEmployeeCannotApproveRejectOrExecuteThroughTheApi`
+  and `nothingExecutesWithoutApproval`; `duplicate-execute-01` by
+  `executingTwiceFailsAndOnlyOneOutcomeExists` and
+  `twoSimultaneousExecutionsCannotBothSucceed`; `rejected-request-01` by
+  `nothingExecutesWithoutApproval`; `edited-approved-01` by
+  `anApprovedRequestCannotBeEditedByTheEmployee`; `cross-user-01` by
+  `ServiceRequestApiIntegrationTest.anotherEmployeesRequestIs404ForReadEditAndSubmit`;
+  and the incomplete-request cases by `cardRequestWithoutCardDigitsIs400` and
+  `anIncompleteDraftCannotBeSubmitted`.
